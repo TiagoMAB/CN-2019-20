@@ -11,7 +11,6 @@ int main(int argc, char **argv) {
 
     int option, n = 0, p = 0;
     char *fsip = NULL, *fsport = NULL;
-    
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option)
