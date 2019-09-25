@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#define PORT "58020"
 
 void error(int error) {
     fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
@@ -32,6 +33,10 @@ int main(int argc, char **argv) {
 
     if (optind < argc) error(1);
 
+    if (!p) { fsport = PORT; }
+
+    if (!n) { fsip = "192.168.1.7"; } 
+    
     printf("%s %s %i\n", fsip, fsport, optind);
 
     return 0;
