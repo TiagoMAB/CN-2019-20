@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #define PORT "58020"
+#define MAXBUFFERSIZE 4096
 
 extern int errno;
 
@@ -80,7 +81,7 @@ int main(int argc, char **argv) {
 
     printf("Introduza o seu comando: ");
     // TODO substituir
-    fgets(command, MAXBUFFERSIZE, sdtin);
+    fgets(command, MAXBUFFERSIZE, stdin);
 
     token = strtok(command, " ");
 
