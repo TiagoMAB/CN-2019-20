@@ -32,7 +32,7 @@ int main() {
 
 	addrlen = sizeof(addr);
 	n = recvfrom(fd, buffer, 128, 0, (struct sockaddr*) &addr, &addrlen);
-	if ( n== -1) /*error*/ exit(1);
+	if (n == -1) /*error*/ exit(1);
 
 	write(1, "echo: ", 6);
 	write(1, buffer, n);

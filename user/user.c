@@ -21,13 +21,14 @@ void error(int error) {
 
 int main(int argc, char **argv) {
 
-    int option, n = 0, p = 0;
+    int option, n = 0, p = 0, userID, fdUDP, fdTCP;
     char *fsip = NULL, *fsport = NULL, command[MAXBUFFERSIZE], *token;
-    int fdUDP, fdTCP;
+    int invalidUID;
     ssize_t s;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
-    char buffer[128];
+    struct sockaddr_in addr;
+    char buffer[128], message_sent[30], message_received[30];
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option)
@@ -84,10 +85,43 @@ int main(int argc, char **argv) {
         // TODO substituir
         fgets(command, MAXBUFFERSIZE, stdin);
 
-        token = strtok(command, " ");
+        token = strtok(command, " \n");
 
-        if (!(strcmp(token, "register") && strcmp(token, "reg")))
-            return 0;
+        if (!(strcmp(token, "register") && strcmp(token, "reg"))) {
+            invalidUID = 0;
+            token = strtok(NULL, " \n");
+            if (strlen(token) == 5) {
+                for (int i = 0; i < 5; i++) {
+                    if (token[i] < '0' || token[i] > '9') {
+                        printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+                        invalidUID = 1;
+                        break;
+                    }
+                }
+            }
+            else
+                printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+
+            if (!invalidUID) {
+                strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
+                n = sendto(fdUDP, message_sent, 10, 0, resUDP->ai_addr, resUDP->ai_addrlen);
+	            if (n == -1) /*error*/ exit(1);
+                
+                addrlen = sizeof(addr);
+                n = recvfrom(fdUDP, message_received, sizeof(message_received), 0, (struct sockaddr*) &addr, &addrlen);
+                if (n == -1) /*error*/ exit(1);
+
+                if (!strcmp(message_received, "RGR OK\n")) {
+                    printf("User \"%s\" registered\n", token);
+                    userID = atoi(token);
+                }
+                else if (!strcmp(message_received, "RGR NOK\n"))
+                    printf("User \"%s\" already exists\n", token);
+                else
+                    /*terminar graciosamente*/
+                    return 0;
+            }
+        }
         else if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
             return 0;
         else if (!strcmp(token, "topic_select"))
@@ -108,6 +142,9 @@ int main(int argc, char **argv) {
             return 0;
         else if (!strcmp(token, "exit"))
             return 0;
+        
+        memset(message_sent, 0, sizeof(message_sent));
+        memset(message_received, 0, sizeof(message_received));
 
         /*while (token != NULL) {
             printf("%s\n", token);
