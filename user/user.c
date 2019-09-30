@@ -79,15 +79,40 @@ int main(int argc, char **argv) {
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
     if (fdTCP == -1) /*error*/ exit(1);
 
-    printf("Introduza o seu comando: ");
-    // TODO substituir
-    fgets(command, MAXBUFFERSIZE, stdin);
+    while (1) {
+        printf("Introduza o seu comando: ");
+        // TODO substituir
+        fgets(command, MAXBUFFERSIZE, stdin);
 
-    token = strtok(command, " ");
+        token = strtok(command, " ");
 
-    while (token != NULL) {
-        printf("%s\n", token);
-        token = strtok(NULL, " ");
+        if (!(strcmp(token, "register") && strcmp(token, "reg")))
+            return 0;
+        else if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
+            return 0;
+        else if (!strcmp(token, "topic_select"))
+            return 0;
+        else if (!strcmp(token, "ts"))
+            return 0;
+        else if (!(strcmp(token, "topic_propose") && strcmp(token, "tp")))
+            return 0;
+        else if (!(strcmp(token, "question_list") && strcmp(token, "ql")))
+            return 0;
+        else if (!strcmp(token, "question_get"))
+            return 0;
+        else if (!strcmp(token, "qg"))
+            return 0;
+        else if (!(strcmp(token, "question_submit") && strcmp(token, "qs")))
+            return 0;
+        else if (!(strcmp(token, "question_answer") && strcmp(token, "qa")))
+            return 0;
+        else if (!strcmp(token, "exit"))
+            return 0;
+
+        /*while (token != NULL) {
+            printf("%s\n", token);
+            token = strtok(NULL, " ");
+        }*/
     }
 
     freeaddrinfo(resUDP);
