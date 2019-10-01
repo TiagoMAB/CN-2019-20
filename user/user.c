@@ -31,8 +31,7 @@ int main(int argc, char **argv) {
     char buffer[128], message_sent[30], message_received[30];
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
-        switch (option)
-        {
+        switch (option) {
         case 'n':
             if (n) error(1);
             n = 1;
@@ -69,12 +68,7 @@ int main(int argc, char **argv) {
 
     hints.ai_socktype = SOCK_STREAM;
 
-    if (gethostname(buffer, 128) == -1)
-        fprintf(stderr, "error: %s\n", strerror(errno));
-    else
-        printf("host name: %s\n", buffer);
-    
-    s = getaddrinfo(buffer, PORT, &hints, &resTCP);
+    s = getaddrinfo("localhost", PORT, &hints, &resTCP);
     if (s != 0) /*error*/ exit(1);
 
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
