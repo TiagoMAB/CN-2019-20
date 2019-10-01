@@ -25,7 +25,7 @@ void error(int error) {
 }
 
 int command_strcmp(char *token) {
-    if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
+    if (!(strcmp(token, "register") && strcmp(token, "reg")))
         return Register;
     else if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
         return Topic_list;
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "%s", message_sent);
 
                     // mensagem vai toda de uma vez - aula 1/10
-                    n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+                    n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
                     if (n == -1) /*error*/ exit(1);
                     
                     addrlen = sizeof(addr);
@@ -164,6 +164,8 @@ int main(int argc, char **argv) {
             case Question_submit:
             case Question_answer:
             case Exit:
+                return 0;
+            default:
                 return 0;
         }
 
