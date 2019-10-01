@@ -15,9 +15,9 @@
 
 extern int errno;
 
-enum options {Register, Topic_list, Topic_select, Ts, Topic_propose,
-              Question_list, Question_get, Qg, Question_submit,
-              Question_answer, Exit};
+enum options {Register, Topic_list, Topic_propose,
+              Question_list, Question_submit,
+              Question_answer, Topic_select, Ts, Question_get, Qg, Exit};
 
 void error(int error) {
     fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
@@ -25,28 +25,26 @@ void error(int error) {
 }
 
 int command_strcmp(char *token) {
-    if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
-        return Register;
-    else if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
-        return Topic_list;
-    else if (!strcmp(token, "topic_select"))
-        return Topic_select;
-    else if (!strcmp(token, "ts"))
-        return Ts;
-    else if (!(strcmp(token, "topic_propose") && strcmp(token, "tp")))
-        return Topic_propose;
-    else if (!(strcmp(token, "question_list") && strcmp(token, "ql")))
-        return Question_list;
-    else if (!strcmp(token, "question_get"))
-        return Question_get;
-    else if (!strcmp(token, "qg"))
-        return Qg;
-    else if (!(strcmp(token, "question_submit") && strcmp(token, "qs")))
-        return Question_submit;
-    else if (!(strcmp(token, "question_answer") && strcmp(token, "qa")))
-        return Question_answer;
-    else if (!strcmp(token, "exit"))
-        return Exit;
+
+    char *opts[] = {"register", "reg", "topic_list", "tl", "topic_propose", 
+                    "tp", "question_list", "ql", "question_submit", "qs", "question_answer", 
+                    "qa", "topic_select", "ts", "question_get", "qg", "exit"};
+    int i = 0;
+
+    for (int i = 0; i < 12; i++) {
+        fprintf(stderr, "%d", i / 2);
+        if (!strcmp(token, opts[i])) {
+            fprintf(stdout, "%d", i / 2);
+            return i / 2;
+        }
+    }
+
+    for(int i = 12; i < 17; i++) {
+        if (!strcmp(token, opts[i])) {
+            fprintf(stdout,"%d", i);
+            return i;
+        }   
+    }
 }
 
 int main(int argc, char **argv) {
@@ -135,7 +133,7 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "%s", message_sent);
 
                     // mensagem vai toda de uma vez - aula 1/10
-                    n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+                    n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
                     if (n == -1) /*error*/ exit(1);
                     
                     addrlen = sizeof(addr);
