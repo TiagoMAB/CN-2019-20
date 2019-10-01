@@ -31,20 +31,18 @@ int command_strcmp(char *token) {
                     "qa", "topic_select", "ts", "question_get", "qg", "exit"};
     int i = 0;
 
-    for (int i = 0; i < 12; i++) {
-        fprintf(stderr, "%d", i / 2);
+    for (i = 0; i < 12; i++) {
         if (!strcmp(token, opts[i])) {
-            fprintf(stdout, "%d", i / 2);
             return i / 2;
         }
     }
 
-    for(int i = 12; i < 17; i++) {
+    for(; i < 17; i++) {
         if (!strcmp(token, opts[i])) {
-            fprintf(stdout,"\n%d\n", i );
             return i - 6;
         }   
     }
+    return i;
 }
 
 int main(int argc, char **argv) {
@@ -114,19 +112,21 @@ int main(int argc, char **argv) {
         switch (result_strcmp) {
             case Register:
                 invalidUID = 0;
-                token = strtok(NULL, " \n");
+                token = strtok(NULL, "\n");
 
                 if (strlen(token) == 5) {
                     for (int i = 0; i < 5; i++) {
                         if (token[i] < '0' || token[i] > '9') {
-                            printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
                             invalidUID = 1;
+                            printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
                             break;
                         }
                     }
                 }
-                else
+                else {
+                    invalidUID = 1;
                     printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+                }
 
                 if (!invalidUID) {
                     strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
@@ -163,10 +163,13 @@ int main(int argc, char **argv) {
             case Question_answer:
             case Exit:
                 break;
+            default:
+                fprintf(stdout, "Command does not exist\n");
+                break;
         }
 
-        memset(message_sent, 0, sizeof(message_sent));
-        memset(message_received, 0, sizeof(message_received));
+        memset(message_sent, 0, MESSAGE_SIZE);
+        memset(message_received, 0, MESSAGE_SIZE);
 
         /*while (token != NULL) {
             printf("%s\n", token);
