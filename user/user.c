@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
     if (fdTCP == -1) /*error*/ exit(1);
 
     while (result_strcmp != 10) {
-        printf("Introduza o seu comando: ");
+        printf("Write command: ");
         // TODO substituir
         fgets(command, MAXBUFFERSIZE, stdin);
 
@@ -118,19 +118,19 @@ int main(int argc, char **argv) {
                     for (int i = 0; i < 5; i++) {
                         if (token[i] < '0' || token[i] > '9') {
                             invalidUID = 1;
-                            printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+                            printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
                             break;
                         }
                     }
                 }
                 else {
                     invalidUID = 1;
-                    printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+                    printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
                 }
 
                 if (!invalidUID) {
                     strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
-                    fprintf(stderr, "%s", message_sent);
+                    fprintf(stderr, "STDERR: %s", message_sent);
 
                     // mensagem vai toda de uma vez - aula 1/10
                     n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
                     addrlen = sizeof(addr);
                     n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
                     if (n == -1) /*error*/ exit(1);
-                    fprintf(stderr, "%s", message_received);
+                    fprintf(stderr, "STDERR: %s", message_received);
 
                     if (!strcmp(message_received, "RGR OK\n")) {
                         printf("User \"%s\" registered\n", token);
