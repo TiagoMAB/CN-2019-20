@@ -41,8 +41,8 @@ int command_strcmp(char *token) {
 
     for(int i = 12; i < 17; i++) {
         if (!strcmp(token, opts[i])) {
-            fprintf(stdout,"%d", i);
-            return i;
+            fprintf(stdout,"\n%d\n", i );
+            return i - 6;
         }   
     }
 }
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, userID, fdUDP, fdTCP;
     char *fsip = NULL, *fsport = NULL, command[MAXBUFFERSIZE], *token;
-    int invalidUID, result_strcmp;
+    int invalidUID, result_strcmp = 0;
     ssize_t s;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
     if (fdTCP == -1) /*error*/ exit(1);
 
-    while (1) {
+    while (result_strcmp != 10) {
         printf("Introduza o seu comando: ");
         // TODO substituir
         fgets(command, MAXBUFFERSIZE, stdin);
@@ -162,7 +162,7 @@ int main(int argc, char **argv) {
             case Question_submit:
             case Question_answer:
             case Exit:
-                return 0;
+                break;
         }
 
         memset(message_sent, 0, sizeof(message_sent));
