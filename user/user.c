@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 
     if (!n) { fsip = "localhost"; } 
     
-    printf("%s %s %i\n", fsip, fsport, optind);
+    printf("STDERR: %s %s %i\n", fsip, fsport, optind);
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
