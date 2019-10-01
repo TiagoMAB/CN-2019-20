@@ -11,6 +11,7 @@
 
 #define PORT "58020"
 #define MAXBUFFERSIZE 4096
+#define MESSAGE_SIZE 30
 
 extern int errno;
 
@@ -28,7 +29,7 @@ int main(int argc, char **argv) {
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
-    char buffer[128], message_sent[30], message_received[30];
+    char buffer[128], message_sent[MESSAGE_SIZE], message_received[MESSAGE_SIZE];
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option) {
@@ -68,7 +69,7 @@ int main(int argc, char **argv) {
 
     hints.ai_socktype = SOCK_STREAM;
 
-    s = getaddrinfo(fsip, fsport, &hints, &resUDP);
+    s = getaddrinfo(fsip, fsport, &hints, &resTCP);
     if (s != 0) /*error*/ exit(1);
 
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
@@ -98,12 +99,14 @@ int main(int argc, char **argv) {
 
             if (!invalidUID) {
                 strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
-                n = sendto(fdUDP, message_sent, 10, 0, resUDP->ai_addr, resUDP->ai_addrlen);
+                fprintf(stderr, "%s", message_sent);
+                n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
 	            if (n == -1) /*error*/ exit(1);
                 
                 addrlen = sizeof(addr);
-                n = recvfrom(fdUDP, message_received, sizeof(message_received), 0, (struct sockaddr*) &addr, &addrlen);
+                n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
                 if (n == -1) /*error*/ exit(1);
+                fprintf(stderr, "%s", message_received);
 
                 if (!strcmp(message_received, "RGR OK\n")) {
                     printf("User \"%s\" registered\n", token);
