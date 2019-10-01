@@ -15,16 +15,45 @@
 
 extern int errno;
 
+enum options {Register, Topic_list, Topic_select, Ts, Topic_propose,
+              Question_list, Question_get, Qg, Question_submit,
+              Question_answer, Exit};
+
 void error(int error) {
     fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
     exit(error);
+}
+
+int command_strcmp(char *token) {
+    if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
+        return Register;
+    else if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
+        return Topic_list;
+    else if (!strcmp(token, "topic_select"))
+        return Topic_select;
+    else if (!strcmp(token, "ts"))
+        return Ts;
+    else if (!(strcmp(token, "topic_propose") && strcmp(token, "tp")))
+        return Topic_propose;
+    else if (!(strcmp(token, "question_list") && strcmp(token, "ql")))
+        return Question_list;
+    else if (!strcmp(token, "question_get"))
+        return Question_get;
+    else if (!strcmp(token, "qg"))
+        return Qg;
+    else if (!(strcmp(token, "question_submit") && strcmp(token, "qs")))
+        return Question_submit;
+    else if (!(strcmp(token, "question_answer") && strcmp(token, "qa")))
+        return Question_answer;
+    else if (!strcmp(token, "exit"))
+        return Exit;
 }
 
 int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, userID, fdUDP, fdTCP;
     char *fsip = NULL, *fsport = NULL, command[MAXBUFFERSIZE], *token;
-    int invalidUID;
+    int invalidUID, result_strcmp;
     ssize_t s;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
@@ -82,64 +111,62 @@ int main(int argc, char **argv) {
 
         token = strtok(command, " \n");
 
-        if (!(strcmp(token, "register") && strcmp(token, "reg"))) {
-            invalidUID = 0;
-            token = strtok(NULL, " \n");
-            if (strlen(token) == 5) {
-                for (int i = 0; i < 5; i++) {
-                    if (token[i] < '0' || token[i] > '9') {
-                        printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
-                        invalidUID = 1;
-                        break;
+        result_strcmp = command_strcmp(token);
+
+        switch (result_strcmp) {
+            case Register:
+                invalidUID = 0;
+                token = strtok(NULL, " \n");
+
+                if (strlen(token) == 5) {
+                    for (int i = 0; i < 5; i++) {
+                        if (token[i] < '0' || token[i] > '9') {
+                            printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+                            invalidUID = 1;
+                            break;
+                        }
                     }
                 }
-            }
-            else
-                printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
-
-            if (!invalidUID) {
-                strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
-                fprintf(stderr, "%s", message_sent);
-                n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-	            if (n == -1) /*error*/ exit(1);
-                
-                addrlen = sizeof(addr);
-                n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-                if (n == -1) /*error*/ exit(1);
-                fprintf(stderr, "%s", message_received);
-
-                if (!strcmp(message_received, "RGR OK\n")) {
-                    printf("User \"%s\" registered\n", token);
-                    userID = atoi(token);
-                }
-                else if (!strcmp(message_received, "RGR NOK\n"))
-                    printf("User \"%s\" already exists\n", token);
                 else
-                    /*terminar graciosamente*/
-                    return 0;
-            }
+                    printf("Introduce command in the format \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+
+                if (!invalidUID) {
+                    strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
+                    fprintf(stderr, "%s", message_sent);
+
+                    // mensagem vai toda de uma vez - aula 1/10
+                    n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+                    if (n == -1) /*error*/ exit(1);
+                    
+                    addrlen = sizeof(addr);
+                    n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
+                    if (n == -1) /*error*/ exit(1);
+                    fprintf(stderr, "%s", message_received);
+
+                    if (!strcmp(message_received, "RGR OK\n")) {
+                        printf("User \"%s\" registered\n", token);
+                        userID = atoi(token);
+                    }
+                    else if (!strcmp(message_received, "RGR NOK\n"))
+                        printf("User \"%s\" already exists\n", token);
+                    else
+                        /*terminar graciosamente*/
+                        return 0;
+                }
+            
+            case Topic_list:
+            case Topic_select:
+            case Ts:
+            case Topic_propose:
+            case Question_list:
+            case Question_get:
+            case Qg:
+            case Question_submit:
+            case Question_answer:
+            case Exit:
+                return 0;
         }
-        else if (!(strcmp(token, "topic_list") && strcmp(token, "tl")))
-            return 0;
-        else if (!strcmp(token, "topic_select"))
-            return 0;
-        else if (!strcmp(token, "ts"))
-            return 0;
-        else if (!(strcmp(token, "topic_propose") && strcmp(token, "tp")))
-            return 0;
-        else if (!(strcmp(token, "question_list") && strcmp(token, "ql")))
-            return 0;
-        else if (!strcmp(token, "question_get"))
-            return 0;
-        else if (!strcmp(token, "qg"))
-            return 0;
-        else if (!(strcmp(token, "question_submit") && strcmp(token, "qs")))
-            return 0;
-        else if (!(strcmp(token, "question_answer") && strcmp(token, "qa")))
-            return 0;
-        else if (!strcmp(token, "exit"))
-            return 0;
-        
+
         memset(message_sent, 0, sizeof(message_sent));
         memset(message_received, 0, sizeof(message_received));
 
