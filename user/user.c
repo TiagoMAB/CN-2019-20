@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 
     if (!p) { fsport = PORT; }
 
-    if (!n) { fsip = "192.168.1.7"; } 
+    if (!n) { fsip = "localhost"; } 
     
     printf("%s %s %i\n", fsip, fsport, optind);
 
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_NUMERICSERV;
 
-    s = getaddrinfo(NULL, PORT, &hints, &resUDP);
+    s = getaddrinfo(fsip, fsport, &hints, &resUDP);
     if (s != 0) /*error*/ exit(1);
 
     fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol);
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
     hints.ai_socktype = SOCK_STREAM;
 
-    s = getaddrinfo("localhost", PORT, &hints, &resTCP);
+    s = getaddrinfo(fsip, fsport, &hints, &resUDP);
     if (s != 0) /*error*/ exit(1);
 
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
