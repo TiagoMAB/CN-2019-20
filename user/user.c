@@ -37,6 +37,8 @@ int command_strcmp(char *token) {
         }
     }
 
+    printf("banana\n");
+
     for(; i < 17; i++) {
         if (!strcmp(token, opts[i])) {
             return i - 6;
@@ -105,7 +107,11 @@ int main(int argc, char **argv) {
         // TODO substituir
         fgets(command, MAXBUFFERSIZE, stdin);
 
-        token = strtok(command, " \n");
+        token = strtok(command, " \n"); 
+
+        if (token == NULL) {
+            continue;
+        }
 
         result_strcmp = command_strcmp(token);
 
