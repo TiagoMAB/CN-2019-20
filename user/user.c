@@ -48,8 +48,8 @@ int command_strcmp(char *token) {
 int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, userID, fdUDP, fdTCP;
-    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE], *token = NULL;
-    int invalidUID, result_strcmp = 0;
+    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL;
+    int invalidUID, result_strcmp = -1;
     ssize_t s;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
@@ -99,22 +99,21 @@ int main(int argc, char **argv) {
     while (result_strcmp != Exit) {
         result_strcmp = -1;
         printf("Write command: ");
-        // TODO substituir
-        fgets(command, MAXBUFFERSIZE, stdin);
 
+          // TODO substituir
+        fgets(command, MAXBUFFERSIZE, stdin);
         token = strtok(command, " \n"); 
 
         if (token != NULL) {
             result_strcmp = command_strcmp(token);
         }
 
-
         switch (result_strcmp) {
             case Register:
                 invalidUID = 0;
                 token = strtok(NULL, "\n");
 
-                if (strlen(token) == 5) {
+                if (token != NULL && strlen(token) == 5) {
                     for (int i = 0; i < 5; i++) {
                         if (token[i] < '0' || token[i] > '9') {
                             invalidUID = 1;
@@ -130,7 +129,7 @@ int main(int argc, char **argv) {
 
                 if (!invalidUID) {
                     strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
-                    fprintf(stderr, "STDERR: %s", message_sent);
+                    printf("STDERR: %s", message_sent);
 
                     // mensagem vai toda de uma vez - aula 1/10
                     n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
@@ -139,7 +138,7 @@ int main(int argc, char **argv) {
                     addrlen = sizeof(addr);
                     n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
                     if (n == -1) /*error*/ exit(1);
-                    fprintf(stderr, "STDERR: %s", message_received);
+                    printf("STDERR: %s", message_received);
 
                     if (!strcmp(message_received, "RGR OK\n")) {
                         printf("User \"%s\" registered\n", token);
@@ -151,16 +150,25 @@ int main(int argc, char **argv) {
                         /*terminar graciosamente*/
                         return 0;
                 }
-            
+                break;
             case Topic_list:
+                break;
             case Topic_select:
+                break;
             case Ts:
+                break;
             case Topic_propose:
+                break;
             case Question_list:
+                break;
             case Question_get:
+                break;
             case Qg:
+                break;
             case Question_submit:
+                break;
             case Question_answer:
+                break;
             case Exit:
                 break;
             default:
