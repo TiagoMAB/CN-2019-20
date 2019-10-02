@@ -48,7 +48,7 @@ int command_strcmp(char *token) {
 int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, userID, fdUDP, fdTCP;
-    char *fsip = NULL, *fsport = NULL, command[MAXBUFFERSIZE], *token = NULL;
+    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE], *token = NULL;
     int invalidUID, result_strcmp = 0;
     ssize_t s;
     socklen_t addrlen;
@@ -74,10 +74,6 @@ int main(int argc, char **argv) {
     }
 
     if (optind < argc) error(1);
-
-    if (!p) { fsport = PORT; }
-
-    if (!n) { fsip = "localhost"; } 
     
     printf("STDERR: %s %s %i\n", fsip, fsport, optind);
 
