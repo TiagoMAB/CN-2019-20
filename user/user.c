@@ -37,8 +37,6 @@ int command_strcmp(char *token) {
         }
     }
 
-    printf("banana\n");
-
     for(; i < 17; i++) {
         if (!strcmp(token, opts[i])) {
             return i - 6;
@@ -102,7 +100,7 @@ int main(int argc, char **argv) {
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
     if (fdTCP == -1) /*error*/ exit(1);
 
-    while (result_strcmp != 10) {
+    while (result_strcmp != Exit) {
         printf("Write command: ");
         // TODO substituir
         fgets(command, MAXBUFFERSIZE, stdin);
