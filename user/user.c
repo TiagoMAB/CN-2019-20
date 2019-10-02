@@ -48,7 +48,7 @@ int command_strcmp(char *token) {
 int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, userID, fdUDP, fdTCP;
-    char *fsip = NULL, *fsport = NULL, command[MAXBUFFERSIZE], *token;
+    char *fsip = NULL, *fsport = NULL, command[MAXBUFFERSIZE], *token = NULL;
     int invalidUID, result_strcmp = 0;
     ssize_t s;
     socklen_t addrlen;
@@ -101,17 +101,17 @@ int main(int argc, char **argv) {
     if (fdTCP == -1) /*error*/ exit(1);
 
     while (result_strcmp != Exit) {
+        result_strcmp = -1;
         printf("Write command: ");
         // TODO substituir
         fgets(command, MAXBUFFERSIZE, stdin);
 
         token = strtok(command, " \n"); 
 
-        if (token == NULL) {
-            continue;
+        if (token != NULL) {
+            result_strcmp = command_strcmp(token);
         }
 
-        result_strcmp = command_strcmp(token);
 
         switch (result_strcmp) {
             case Register:
