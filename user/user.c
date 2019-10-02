@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, userID, fdUDP, fdTCP;
     char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL;
-    int invalidUID, result_strcmp = -1;
+    int invalidCommandFlag, result_strcmp = -1;
     ssize_t s;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
@@ -96,6 +96,9 @@ int main(int argc, char **argv) {
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
     if (fdTCP == -1) /*error*/ exit(1);
 
+    memset(message_sent, 0, MESSAGE_SIZE);
+    memset(message_received, 0, MESSAGE_SIZE);
+
     while (result_strcmp != Exit) {
         result_strcmp = -1;
         printf("Write command: ");
@@ -110,24 +113,24 @@ int main(int argc, char **argv) {
 
         switch (result_strcmp) {
             case Register:
-                invalidUID = 0;
+                invalidCommandFlag = 0;
                 token = strtok(NULL, "\n");
 
                 if (token != NULL && strlen(token) == 5) {
                     for (int i = 0; i < 5; i++) {
                         if (token[i] < '0' || token[i] > '9') {
-                            invalidUID = 1;
+                            invalidCommandFlag = 1;
                             printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
                             break;
                         }
                     }
                 }
                 else {
-                    invalidUID = 1;
+                    invalidCommandFlag = 1;
                     printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
                 }
 
-                if (!invalidUID) {
+                if (!invalidCommandFlag) {
                     strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
                     printf("STDERR: %s", message_sent);
 
@@ -152,11 +155,80 @@ int main(int argc, char **argv) {
                 }
                 break;
             case Topic_list:
+                invalidCommandFlag = 0;
+
+                token = strtok(NULL, "\n");
+                if(token != NULL) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Format incorrect. Should be: \"topic_list\" or \"ts\"\n");
+                }
+
+                if (!invalidCommandFlag) {
+                    strcat(message_sent, "LTP"); strcat(message_sent, "\n");
+                    fprintf(stderr, "%s", message_sent);
+                    n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+	                if (n == -1) /*error*/ exit(1);
+                
+                    /*Esta mal. Necessita de conseguir receber cada topic, um a um*/
+                    addrlen = sizeof(addr);
+                    n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
+                    if (n == -1) /*error*/ exit(1);
+                    fprintf(stderr, "%s", message_received);
+
+                    if (!strcmp(message_received, "LTR N\n")) {
+                        printf("User \"%s\" registered\n", token);
+                        userID = atoi(token);
+                    }
+                    else if (!strcmp(message_received, "LTR 0\n"))
+                        printf("User \"%s\" already exists\n", token);
+                    else
+                        /*terminar graciosamente*/
+                        return 0;
+                }
                 break;
+            
             case Topic_select:
+                invalidCommandFlag = 0;
+                token = strtok(NULL, " \n");
+
+                if (token == NULL) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
+                }
+
+                if(strtok(NULL, "\n") != NULL) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+                }
+
+                if (!invalidCommandFlag) {
+                    /*guardar topic*/
+                }
                 break;
+            
             case Ts:
+                invalidCommandFlag = 0;
+                token = strtok(NULL, "\n");
+
+                if (token != NULL) {
+                    for (int i = 0; i < strlen(token); i++) {
+                        if (token[i] < '0' || token[i] > '9') {
+                            invalidCommandFlag = 1;
+                            printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+                            break;
+                        }
+                    }
+                }
+                else {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+                }
+
+                if (!invalidCommandFlag) {
+                    /*guardar topic number*/
+                }
                 break;
+            
             case Topic_propose:
                 break;
             case Question_list:
