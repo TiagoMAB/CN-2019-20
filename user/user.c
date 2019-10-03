@@ -12,6 +12,7 @@
 #define PORT "58020"
 #define MAXBUFFERSIZE 4096
 #define MESSAGE_SIZE 30
+#define MAXUSERIDSIZE 5 + 1
 
 extern int errno;
 
@@ -47,14 +48,14 @@ int command_strcmp(char *token) {
 
 int main(int argc, char **argv) {
 
-    int option, n = 0, p = 0, userID, fdUDP, fdTCP;
+    int option, n = 0, p = 0, fdUDP, fdTCP;
     char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL;
     int invalidCommandFlag, result_strcmp = -1;
     ssize_t s;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
-    char buffer[128], message_sent[MESSAGE_SIZE], message_received[MESSAGE_SIZE];
+    char buffer[128], message_sent[MESSAGE_SIZE], message_received[MESSAGE_SIZE], userID[MAXUSERIDSIZE];
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option) {
@@ -98,6 +99,7 @@ int main(int argc, char **argv) {
 
     memset(message_sent, 0, MESSAGE_SIZE);
     memset(message_received, 0, MESSAGE_SIZE);
+    memset(userID, 0, MAXUSERIDSIZE);
 
     while (result_strcmp != Exit) {
         result_strcmp = -1;
@@ -145,7 +147,7 @@ int main(int argc, char **argv) {
 
                     if (!strcmp(message_received, "RGR OK\n")) {
                         printf("User \"%s\" registered\n", token);
-                        userID = atoi(token);
+                        strcpy(userID,token);
                     }
                     else if (!strcmp(message_received, "RGR NOK\n"))
                         printf("User \"%s\" already exists\n", token);
@@ -154,6 +156,7 @@ int main(int argc, char **argv) {
                         return 0;
                 }
                 break;
+
             case Topic_list:
                 invalidCommandFlag = 0;
 
@@ -175,12 +178,10 @@ int main(int argc, char **argv) {
                     if (n == -1) /*error*/ exit(1);
                     fprintf(stderr, "%s", message_received);
 
-                    if (!strcmp(message_received, "LTR N\n")) {
-                        printf("User \"%s\" registered\n", token);
-                        userID = atoi(token);
-                    }
+                    if (!strcmp(message_received, "LTR N\n"))
+                        printf("End of List");
                     else if (!strcmp(message_received, "LTR 0\n"))
-                        printf("User \"%s\" already exists\n", token);
+                        printf("No topics are yet available\n");
                     else
                         /*terminar graciosamente*/
                         return 0;
@@ -198,7 +199,7 @@ int main(int argc, char **argv) {
 
                 if(strtok(NULL, "\n") != NULL) {
                     invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being an non-empty string\n");
                 }
 
                 if (!invalidCommandFlag) {
@@ -211,7 +212,7 @@ int main(int argc, char **argv) {
                 token = strtok(NULL, "\n");
 
                 if (token != NULL) {
-                    for (int i = 0; i < strlen(token); i++) {
+                    for (int i = 0; token[i] != '\n'; i++) {
                         if (token[i] < '0' || token[i] > '9') {
                             invalidCommandFlag = 1;
                             printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
@@ -230,7 +231,53 @@ int main(int argc, char **argv) {
                 break;
             
             case Topic_propose:
+                invalidCommandFlag = 0;
+                token = strtok(NULL, " \n");
+
+                if (token == NULL) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
+                }
+
+                if(strtok(NULL, "\n") != NULL) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+                }
+
+                printf("user: %s \n", userID);
+                if(strlen(userID) == 0) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Missing information. Missing userID, no user has been registered\n");
+                }
+
+                if (!invalidCommandFlag) {
+                    printf("topic: %s \n", token);
+                    strcat(message_sent, "PTP "); strcat(message_sent, userID); strcat(message_sent, " "); strcat(message_sent, token); strcat(message_sent, "\n");
+                    printf("STDERR: %s", message_sent);
+
+                    printf("help!\n");
+                    n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+                    if (n == -1) /*error*/ exit(1);
+                    
+                    addrlen = sizeof(addr);
+                    n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
+                    if (n == -1) /*error*/ exit(1);
+                    printf("STDERR: %s", message_received);
+
+                    if (!strcmp(message_received, "PTR OK\n"))
+                        printf("Topic \"%s\" successfully proposed\n", token);
+                    else if (!strcmp(message_received, "PTR DUP\n"))
+                        printf("Topic \"%s\" already exists\n", token);
+                    else if (!strcmp(message_received, "PTR FUL\n"))
+                        printf("Topic List is full\n");
+                    else if (!strcmp(message_received, "PTR NOK\n"))
+                        printf("Proposal of topic \"%s\" was unnsuccesful\n", token);
+                    else
+                        /*terminar graciosamente*/
+                        return 0;
+                }
                 break;
+
             case Question_list:
                 break;
             case Question_get:
