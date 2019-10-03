@@ -257,7 +257,6 @@ int main(int argc, char **argv) {
                 }
 
                 if (!invalidCommandFlag) {
-                    printf("topic: %s \n", token);
                     strcat(message_sent, "PTP "); strcat(message_sent, userID); strcat(message_sent, " "); strcat(message_sent, token); strcat(message_sent, "\n");
                     printf("STDERR: %s", message_sent);
 
@@ -309,9 +308,9 @@ int main(int argc, char **argv) {
                     if (n == -1) /*error*/ exit(1);
                     fprintf(stderr, "%s", message_received);
 
-                    if (!strcmp(message_received, "LTR N\n"))
+                    if (!strcmp(message_received, "LQR N\n"))
                         printf("End of List");
-                    else if (!strcmp(message_received, "LTR 0\n"))
+                    else if (!strcmp(message_received, "LQR 0\n"))
                         printf("No questions are yet available\n");
                     else
                         /*terminar graciosamente*/
