@@ -13,6 +13,7 @@
 #define MAXBUFFERSIZE 4096
 #define MESSAGE_SIZE 30
 #define MAXUSERIDSIZE 5 + 1
+#define MAXTOPICSIZE 30 + 1
 
 extern int errno;
 
@@ -48,14 +49,14 @@ int command_strcmp(char *token) {
 
 int main(int argc, char **argv) {
 
-    int option, n = 0, p = 0, fdUDP, fdTCP;
+    int option, n = 0, p = 0, fdUDP, fdTCP, topicNumber = -1;
     char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL;
     int invalidCommandFlag, result_strcmp = -1;
     ssize_t s;
     socklen_t addrlen;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
-    char buffer[128], message_sent[MESSAGE_SIZE], message_received[MESSAGE_SIZE], userID[MAXUSERIDSIZE];
+    char buffer[128], message_sent[MESSAGE_SIZE], message_received[MESSAGE_SIZE], userID[MAXUSERIDSIZE], selectedTopic[MAXTOPICSIZE];
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option) {
@@ -100,6 +101,7 @@ int main(int argc, char **argv) {
     memset(message_sent, 0, MESSAGE_SIZE);
     memset(message_received, 0, MESSAGE_SIZE);
     memset(userID, 0, MAXUSERIDSIZE);
+    memset(selectedTopic, 0, MAXTOPICSIZE);
 
     while (result_strcmp != Exit) {
         result_strcmp = -1;
@@ -163,7 +165,7 @@ int main(int argc, char **argv) {
                 token = strtok(NULL, "\n");
                 if(token != NULL) {
                     invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"topic_list\" or \"ts\"\n");
+                    printf("ERR: Format incorrect. Should be: \"topic_list\" or \"tl\"\n");
                 }
 
                 if (!invalidCommandFlag) {
@@ -194,16 +196,20 @@ int main(int argc, char **argv) {
 
                 if (token == NULL) {
                     invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
+                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string of less than 30 chars\n");
+                }
+                else if(strlen(token) > 30) {
+                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string of less than 30 chars\n");
                 }
 
                 if(strtok(NULL, "\n") != NULL) {
                     invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being an non-empty string\n");
+                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being an non-empty string of less than 30 chars\n");
                 }
 
                 if (!invalidCommandFlag) {
-                    /*guardar topic*/
+                    strcpy(selectedTopic, token);
+                    printf("Topic selected\n");
                 }
                 break;
             
@@ -212,7 +218,7 @@ int main(int argc, char **argv) {
                 token = strtok(NULL, "\n");
 
                 if (token != NULL) {
-                    for (int i = 0; token[i] != '\n'; i++) {
+                    for (unsigned int i = 0; i < strlen(token); i++) {
                         if (token[i] < '0' || token[i] > '9') {
                             invalidCommandFlag = 1;
                             printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
@@ -226,7 +232,8 @@ int main(int argc, char **argv) {
                 }
 
                 if (!invalidCommandFlag) {
-                    /*guardar topic number*/
+                    topicNumber = atoi(token);
+                    printf("Topic selected\n");
                 }
                 break;
             
@@ -236,15 +243,14 @@ int main(int argc, char **argv) {
 
                 if (token == NULL) {
                     invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
+                    printf("ERR: Format incorrect. Should be: \"topic_propose topic\" or \"ts topic\" with topic being a non-empty string\n");
                 }
 
                 if(strtok(NULL, "\n") != NULL) {
                     invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+                    printf("ERR: Format incorrect. Should be: \"topic_propose topic\" or \"ts topic\" with topic being a non-empty string\n");
                 }
 
-                printf("user: %s \n", userID);
                 if(strlen(userID) == 0) {
                     invalidCommandFlag = 1;
                     printf("ERR: Missing information. Missing userID, no user has been registered\n");
@@ -255,7 +261,6 @@ int main(int argc, char **argv) {
                     strcat(message_sent, "PTP "); strcat(message_sent, userID); strcat(message_sent, " "); strcat(message_sent, token); strcat(message_sent, "\n");
                     printf("STDERR: %s", message_sent);
 
-                    printf("help!\n");
                     n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
                     if (n == -1) /*error*/ exit(1);
                     
@@ -279,6 +284,39 @@ int main(int argc, char **argv) {
                 break;
 
             case Question_list:
+                invalidCommandFlag = 0;
+
+                token = strtok(NULL, "\n");
+                if(token != NULL) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Format incorrect. Should be: \"question_list\" or \"ql\"\n");
+                }
+
+                if(strlen(selectedTopic) == 0) {
+                    invalidCommandFlag = 1;
+                    printf("ERR: Missing information. Missing selectedTopic, no topic has been selected\n");
+                }
+
+                if (!invalidCommandFlag) {
+                    strcat(message_sent, "LQU "); strcat(message_sent, selectedTopic); strcat(message_sent, "\n");
+                    fprintf(stderr, "%s", message_sent);
+                    n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+	                if (n == -1) /*error*/ exit(1);
+                
+                    /*Esta mal. Necessita de conseguir receber cada topic, um a um*/
+                    addrlen = sizeof(addr);
+                    n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
+                    if (n == -1) /*error*/ exit(1);
+                    fprintf(stderr, "%s", message_received);
+
+                    if (!strcmp(message_received, "LTR N\n"))
+                        printf("End of List");
+                    else if (!strcmp(message_received, "LTR 0\n"))
+                        printf("No questions are yet available\n");
+                    else
+                        /*terminar graciosamente*/
+                        return 0;
+                }
                 break;
             case Question_get:
                 break;
