@@ -16,8 +16,9 @@
 
 extern int errno;
 
-enum options {  REG, TL, TP, QL, QS, QA, 
-                TST, TSN, QGQ, QGN, EXIT };
+enum options {register, topic_list, topic_propose,
+              question_list, question_submit,
+              question_answer, topic_select, ts, question_get, qg, exit};
 
 socklen_t addrlen;
 struct sockaddr_in addr;
@@ -285,7 +286,7 @@ int main(int argc, char **argv) {
         }
 
         switch (result) {
-            case REG:
+            case register:
                 if (strlen(userID) != 5) {
                     strcpy(userID, registerID(fdUDP, token));
                 }
@@ -294,7 +295,7 @@ int main(int argc, char **argv) {
                 }
                 break;
 
-            case TL:
+            case topic_list:
                 token = strtok(NULL, "\n");
                 if (token != NULL) {
                     printf("ERR: Format incorrect. Should be: \"topic_list\" or \"ts\"\n");
@@ -304,7 +305,7 @@ int main(int argc, char **argv) {
                 }
                 break;
             
-            case TST:
+            case topic_select:
                 if ((nTopics) == 0) {
                     printf("ERR: No topics available\n");
                 }
@@ -313,7 +314,7 @@ int main(int argc, char **argv) {
                 }
                 break;
             
-            case TSN:
+            case ts:
                 if ((nTopics) == 0) {
                     printf("ERR: No topics available\n");
                 }
@@ -322,7 +323,7 @@ int main(int argc, char **argv) {
                 }
                 break;
             
-            case TP:
+            case topic_propose:
                 invalidCommandFlag = 0;
                 token = strtok(NULL, " \n");
 
@@ -370,17 +371,17 @@ int main(int argc, char **argv) {
                 }
                 break;
 
-            case QL:
+            case question_list:
                 break;
-            case QGQ:
+            case question_get:
                 break;
-            case QGN:
+            case qg:
                 break;
-            case QS:
+            case question_submit:
                 break;
-            case QA:
+            case question_answer:
                 break;
-            case EXIT:
+            case exit:
                 break;
             default:
                 fprintf(stdout, "Command does not exist\n");

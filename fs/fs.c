@@ -12,7 +12,7 @@
 #define PORT "58020"
 
 void error(int error) {
-    fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
+    fprintf(stdout, "ERR: Format incorrect. Should be: ./FS [-p FSport]\n");
     exit(error);
 }
 
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     int option, p = 0, running = 1;
     char *fsport = NULL;
     
-    while ((option = getopt (argc, argv, "n:p:")) != -1) {
+    while ((option = getopt (argc, argv, "p:")) != -1) {
         switch (option)
         {
         case 'p':
