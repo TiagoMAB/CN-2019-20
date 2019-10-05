@@ -69,8 +69,8 @@ char* registerID(int fdUDP, char* token) {
     int invalid = 0, n = 0;
     char messageSent[MESSAGE_SIZE] = "", messageReceived[MESSAGE_SIZE] = "";
 
-    memset(messageSent, 0, MESSAGE_SIZE);
-    memset(messageReceived, 0, MESSAGE_SIZE);
+    memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageReceived, '\0', MESSAGE_SIZE);
 
     // Verifies validity of userID introduced
     token = strtok(NULL, "\n");
@@ -123,22 +123,17 @@ char* registerID(int fdUDP, char* token) {
 char** topicList(int fdUDP, int *nTopics, char** tList) {
 
     int n = 0, i = 0;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
+    char messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
 
-    memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageReceived, '\0', MAXBUFFERSIZE);
 
-    strcat(messageSent, "LTP"); strcat(messageSent, "\n");
-    fprintf(stderr, "%s", messageSent); // TO REMOVE
-
-    n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+    n = sendto(fdUDP, "LTP\n", 4, 0, resUDP->ai_addr, resUDP->ai_addrlen);
     if (n == -1) error(2);
     
     addrlen = sizeof(addr);
     n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE - 2, 0, (struct sockaddr*) &addr, &addrlen);
     if (n == -1) error(2);
-    if (n == MAXBUFFERSIZE - 2) {
-        error(3); //message too long, can't be fully recovered
-    }
+    if (n == MAXBUFFERSIZE - 2) error(3); //message too long, can't be fully recovered
     messageReceived[n] = '\0';
 
     fprintf(stderr, "%s", messageReceived); // TO REMOVE
@@ -324,16 +319,12 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1;
-    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL,
-        buffer[128], messageSent[MESSAGE_SIZE], messageReceived[MESSAGE_SIZE], userID[MESSAGE_SIZE];
+    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL, userID[MAXUSERIDSIZE];
     int result = -1;
     ssize_t s;
     struct addrinfo hints;
     char **tList;
     char **qList;
-    memset(messageSent, '\0', MESSAGE_SIZE);
-    memset(messageReceived, '\0', MESSAGE_SIZE);
-    memset(userID, '\0', MESSAGE_SIZE);
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option) {
@@ -374,6 +365,9 @@ int main(int argc, char **argv) {
 
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
     if (fdTCP == -1) error(2);
+    
+    memset(userID, '\0', MAXUSERIDSIZE);
+    memset(command, '\0', MAXBUFFERSIZE);
 
     while (result != EXIT) {
         result = -1;
@@ -460,10 +454,8 @@ int main(int argc, char **argv) {
                 fprintf(stdout, "Command does not exist\n");
                 break;
         }
-
-        memset(messageSent, '\0', MESSAGE_SIZE);
-        memset(messageReceived, '\0', MESSAGE_SIZE);
     }
+    
     for (int i = 0; i < nTopics; i++) {
         free(tList[i]); 
     }
