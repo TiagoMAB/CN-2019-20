@@ -205,19 +205,19 @@ int selectTopicN(char* token, char** topicList, int nTopics) {
 
     token = strtok(NULL, " \n");
     if ((token == NULL) || (strtok(NULL, "\n") != NULL) || (strlen(token) > 2)) {
-        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer in the XX format within the amount of topics\n");
+        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer within the amount of topics\n");
         return -1;
     }
     for (int i = 0; i < 2; i++) {
         if ((token[i] < '0' || token[i] > '9') && (token[i] != '\0')) {
-            printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer in the XX format within the amount of topics\n");
+            printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer within the amount of topics\n");
             return -1;
         }
     }
     
     n = atoi(token);
     if ((n <= 0) || (n > nTopics)) {
-        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer in the XX format within the amount of topics\n");
+        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer within the amount of topics\n");
         return -1;
     }
 
@@ -436,8 +436,11 @@ int main(int argc, char **argv) {
 
             case QUESTION_LIST:
                 token = strtok(NULL, "\n");
-                if (token != NULL) {
+                if ((token != NULL)) {
                     printf("ERR: Format incorrect. Should be: \"question_list\" or \"ql\"\n");
+                }
+                else if(sTopic == -1){
+                    printf("ERR: Missing information. No topic has been selected\n");
                 }
                 else { 
                     qList = questionList(fdUDP, &nQuestions, tList[sTopic], qList);
