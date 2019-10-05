@@ -209,7 +209,7 @@ int selectTopicN(char* token, char** topicList, int nTopics) {
         return -1;
     }
     for (int i = 0; i < 2; i++) {
-        if (token[i] < '0' || token[i] > '9') {
+        if ((token[i] < '0' || token[i] > '9') && (token[i] != '\0')) {
             printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer in the XX format within the amount of topics\n");
             return -1;
         }
