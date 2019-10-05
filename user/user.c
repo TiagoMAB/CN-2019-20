@@ -205,23 +205,23 @@ int selectTopicN(char* token, char** topicList, int nTopics) {
 
     token = strtok(NULL, " \n");
     if ((token == NULL) || (strtok(NULL, "\n") != NULL) || (strlen(token) > 2)) {
-        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer in the XX format within the amount of topics\n");
         return -1;
     }
     for (int i = 0; i < 2; i++) {
         if (token[i] < '0' || token[i] > '9') {
-            printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+            printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer in the XX format within the amount of topics\n");
             return -1;
         }
     }
     
     n = atoi(token);
     if ((n <= 0) || (n > nTopics)) {
-        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer in the XX format within the amount of topics\n");
         return -1;
     }
 
-    printf("Topic selected: %d %s\n", n, strtok(topicList[n], ":"));
+    printf("Topic selected: %d %s\n", n, strtok(topicList[n-1], ":"));
     return n - 1;
 }
 
@@ -265,15 +265,72 @@ void topicPropose(int fdUDP, char* token, char* userID) {
     }
 }
 
+char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
+    int n = 0, i = 0;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
+
+    memset(messageSent, '\0', MESSAGE_SIZE);
+
+    strcat(messageSent, "LQU "); strcat(messageSent, topic); strcat(messageSent, "\n");
+    fprintf(stderr, "%s", messageSent); // TO REMOVE
+
+    n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+    if (n == -1) error(2);
+    
+    addrlen = sizeof(addr);
+    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE - 2, 0, (struct sockaddr*) &addr, &addrlen);
+    if (n == -1) error(2);
+    if (n == MAXBUFFERSIZE - 2) {
+        error(3); //message too long, can't be fully recovered
+    }
+    messageReceived[n] = '\0';
+
+    fprintf(stderr, "%s", messageReceived); // TO REMOVE
+
+    if (!strcmp(messageReceived, "LQR 0\n")) {
+        printf("No questions titles are yet available\n");
+        return qList;
+    }
+
+    token = strtok(messageReceived, " ");
+    if (strcmp(messageReceived, "LQR")) {
+        error(2);
+    } 
+
+    if (*nQuestions != 0) {
+        for (int i = 0; i < *nQuestions; i++) {
+            free(qList[i]); 
+        }
+        free(qList);
+    }
+
+    token = strtok(NULL, " ");
+    *nQuestions = atoi(token);
+    if (*nQuestions == 0) {
+        error(2);
+    }
+
+    qList = (char**)malloc(sizeof(char*)*(atoi(token)));
+
+    while ((token = strtok(NULL, " \n")) != NULL) {
+        qList[i] = (char*)malloc(sizeof(char)*21);
+        strcpy(qList[i++], token); 
+    }
+    
+    //falta verificar se recebemos a resposta toda certa
+    return qList;
+}
+
 int main(int argc, char **argv) {
 
-    int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, sTopic = -1;
+    int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1;
     char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL,
         buffer[128], messageSent[MESSAGE_SIZE], messageReceived[MESSAGE_SIZE], userID[MESSAGE_SIZE];
-    int invalidCommandFlag, result = -1;
+    int result = -1;
     ssize_t s;
     struct addrinfo hints;
     char **tList;
+    char **qList;
     memset(messageSent, '\0', MESSAGE_SIZE);
     memset(messageReceived, '\0', MESSAGE_SIZE);
     memset(userID, '\0', MESSAGE_SIZE);
@@ -378,6 +435,13 @@ int main(int argc, char **argv) {
                 break;
 
             case QUESTION_LIST:
+                token = strtok(NULL, "\n");
+                if (token != NULL) {
+                    printf("ERR: Format incorrect. Should be: \"question_list\" or \"ql\"\n");
+                }
+                else { 
+                    qList = questionList(fdUDP, &nQuestions, tList[sTopic], qList);
+                }
                 break;
             case QUESTION_GET:
                 break;
@@ -400,7 +464,12 @@ int main(int argc, char **argv) {
     for (int i = 0; i < nTopics; i++) {
         free(tList[i]); 
     }
+    for (int i = 0; i < nQuestions; i++) {
+        free(qList[i]); 
+    }
+
     free(tList);
+    free(qList);
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
     close(fdUDP);
