@@ -16,9 +16,8 @@
 
 extern int errno;
 
-enum options {register, topic_list, topic_propose,
-              question_list, question_submit,
-              question_answer, topic_select, ts, question_get, qg, exit};
+enum options {  REGISTER, TOPIC_LIST, TOPIC_PROPOSE, QUESTION_LIST, QUESTION_SUBMIT, QUESTION_ANSWER, 
+                TOPIC_SELECT, TS, QUESTION_GET, QG, EXIT };
 
 socklen_t addrlen;
 struct sockaddr_in addr;
@@ -182,8 +181,8 @@ int selectTopicT(char* token, char** topicList, int nTopics) {
 
     char* token2;
 
-    token = strtok(NULL, "\n");
-    if (token == NULL) {
+    token = strtok(NULL, " \n");
+    if ((token == NULL) || (strtok(NULL, "\n") != NULL)) {
         printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
         return -1;
     }
@@ -204,20 +203,66 @@ int selectTopicN(char* token, char** topicList, int nTopics) {
 
     char* token2, n;
 
-    token = strtok(NULL, "\n");
-    if (token == NULL) {
+    token = strtok(NULL, " \n");
+    if ((token == NULL) || (strtok(NULL, "\n") != NULL) || (strlen(token) > 2)) {
         printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
         return -1;
     }
-
+    for (int i = 0; i < 2; i++) {
+        if (token[i] < '0' || token[i] > '9') {
+            printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+            return -1;
+        }
+    }
+    
     n = atoi(token);
-    if ((n == 0) || (n < 0) || (n > nTopics)) {
+    if ((n <= 0) || (n > nTopics)) {
         printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
         return -1;
     }
 
-    printf("Topic selected: %d %s\n", n, strtok(topicList[i], ":"));
+    printf("Topic selected: %d %s\n", n, strtok(topicList[n], ":"));
     return n - 1;
+}
+
+void topicPropose(int fdUDP, char* token, char* userID) {
+
+    int n = 0;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MESSAGE_SIZE] = "";
+
+    memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageReceived, '\0', MESSAGE_SIZE);
+
+    token = strtok(NULL, " \n");
+    if ((token == NULL) || (strtok(NULL, "\n") != NULL)) {
+        printf("ERR: Format incorrect. Should be: \"topic_propose topic\" or \"tp topic\" with topic being a non-empty string\n");
+        return -1;
+    }
+
+    strcat(messageSent, "PTP "); strcat(messageSent, userID); strcat(messageSent, " "); strcat(messageSent, token); strcat(messageSent, "\n");
+
+    n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+    if (n == -1) error(2);
+    
+    addrlen = sizeof(addr);
+    n = recvfrom(fdUDP, messageReceived, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
+    if (n == -1) error(2);
+
+    if (!strcmp(messageReceived, "PTR OK\n")) {
+        printf("Topic \"%s\" successfully proposed\n", token);
+    }
+    else if (!strcmp(messageReceived, "PTR DUP\n")) {
+        printf("Topic \"%s\" already exists\n", token);
+    }
+    else if (!strcmp(messageReceived, "PTR FUL\n")) {
+        printf("Topic List is full\n");
+    }
+    else if (!strcmp(messageReceived, "PTR NOK\n")) {
+        printf("Proposal of topic \"%s\" was unnsuccesful\n", token);
+    }
+    else {
+        error(2); //maybe alterar para outra coisa que nao sai do programa
+    }
 }
 
 int main(int argc, char **argv) {
@@ -286,7 +331,7 @@ int main(int argc, char **argv) {
         }
 
         switch (result) {
-            case register:
+            case REGISTER:
                 if (strlen(userID) != 5) {
                     strcpy(userID, registerID(fdUDP, token));
                 }
@@ -295,17 +340,17 @@ int main(int argc, char **argv) {
                 }
                 break;
 
-            case topic_list:
+            case TOPIC_LIST:
                 token = strtok(NULL, "\n");
                 if (token != NULL) {
-                    printf("ERR: Format incorrect. Should be: \"topic_list\" or \"ts\"\n");
+                    printf("ERR: Format incorrect. Should be: \"topic_list\" or \"tl\"\n");
                 }
                 else { 
                     tList = topicList(fdUDP, &nTopics, tList);
                 }
                 break;
             
-            case topic_select:
+            case TOPIC_SELECT:
                 if ((nTopics) == 0) {
                     printf("ERR: No topics available\n");
                 }
@@ -314,7 +359,7 @@ int main(int argc, char **argv) {
                 }
                 break;
             
-            case ts:
+            case TS:
                 if ((nTopics) == 0) {
                     printf("ERR: No topics available\n");
                 }
@@ -323,65 +368,26 @@ int main(int argc, char **argv) {
                 }
                 break;
             
-            case topic_propose:
-                invalidCommandFlag = 0;
-                token = strtok(NULL, " \n");
-
-                if (token == NULL) {
-                    invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
+            case TOPIC_PROPOSE:
+                if (strlen(userID) != 0) {
+                    topicPropose(fdUDP, token, userID);
                 }
-
-                if(strtok(NULL, "\n") != NULL) {
-                    invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
-                }
-
-                printf("user: %s \n", userID);
-                if(strlen(userID) == 0) {
-                    invalidCommandFlag = 1;
-                    printf("ERR: Missing information. Missing userID, no user has been registered\n");
-                }
-
-                if (!invalidCommandFlag) {
-                    printf("topic: %s \n", token);
-                    strcat(messageSent, "PTP "); strcat(messageSent, userID); strcat(messageSent, " "); strcat(messageSent, token); strcat(messageSent, "\n");
-                    printf("STDERR: %s", messageSent);
-
-                    printf("help!\n");
-                    n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-                    if (n == -1) /*error*/ exit(1);
-                    
-                    addrlen = sizeof(addr);
-                    n = recvfrom(fdUDP, messageReceived, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-                    if (n == -1) /*error*/ exit(1);
-                    printf("STDERR: %s", messageReceived);
-
-                    if (!strcmp(messageReceived, "PTR OK\n"))
-                        printf("Topic \"%s\" successfully proposed\n", token);
-                    else if (!strcmp(messageReceived, "PTR DUP\n"))
-                        printf("Topic \"%s\" already exists\n", token);
-                    else if (!strcmp(messageReceived, "PTR FUL\n"))
-                        printf("Topic List is full\n");
-                    else if (!strcmp(messageReceived, "PTR NOK\n"))
-                        printf("Proposal of topic \"%s\" was unnsuccesful\n", token);
-                    else
-                        /*terminar graciosamente*/
-                        return 0;
+                else {
+                    printf("ERR: Missing information. No user has been registered\n");
                 }
                 break;
 
-            case question_list:
+            case QUESTION_LIST:
                 break;
-            case question_get:
+            case QUESTION_GET:
                 break;
-            case qg:
+            case QG:
                 break;
-            case question_submit:
+            case QUESTION_SUBMIT:
                 break;
-            case question_answer:
+            case QUESTION_ANSWER:
                 break;
-            case exit:
+            case EXIT:
                 break;
             default:
                 fprintf(stdout, "Command does not exist\n");
