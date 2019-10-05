@@ -16,13 +16,31 @@
 
 extern int errno;
 
-enum options {Register, Topic_list, Topic_propose,
-              Question_list, Question_submit,
-              Question_answer, Topic_select, Ts, Question_get, Qg, Exit};
+enum options {  REG, TL, TP, QL, QS, QA, 
+                TST, TSN, QGQ, QGN, EXIT };
+
+socklen_t addrlen;
+struct sockaddr_in addr;
+struct addrinfo *resUDP, *resTCP;
 
 void error(int error) {
-    fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
-    exit(error);
+    
+    switch (error) {
+    case 1:
+        fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
+        exit(error);
+    
+    case 2:
+        fprintf(stdout, "ERR: Something went wrong with UDP or TCP connection\n");
+        exit(error);
+
+    case 3:
+        fprintf(stdout, "ERR: Message too big, data loss expected\n");
+        exit(error);
+
+    default:
+        break;
+    }
 }
 
 int command_strcmp(char *token) {
@@ -46,16 +64,173 @@ int command_strcmp(char *token) {
     return i;
 }
 
+char* registerID(int fdUDP, char* token) {
+
+    int invalid = 0, n = 0;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MESSAGE_SIZE] = "";
+
+    memset(messageSent, 0, MESSAGE_SIZE);
+    memset(messageReceived, 0, MESSAGE_SIZE);
+
+    // Verifies validity of userID introduced
+    token = strtok(NULL, "\n");
+    if (token != NULL && strlen(token) == 5) {
+        for (int i = 0; i < 5; i++) {
+            if (token[i] < '0' || token[i] > '9') {
+                invalid = 1;
+                printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+                return "";
+            }
+        }
+    }
+    else {
+        invalid = 1;
+        printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
+        return "";
+    }
+
+    // If userID is valid, sends the information to the server with the format "REG USERID" 
+    // and waits a response from it. If the response is "RGR OK", the user is registered
+    // If "RGR NOK" is received, it was not possible to register user
+    if (!invalid) {
+        strcat(messageSent, "REG "); strcat(messageSent, token); strcat(messageSent, "\n");
+        fprintf(stderr, "STDERR: %s", messageSent); // TO REMOVE
+
+        n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+        if (n == -1) error(2);
+        
+        addrlen = sizeof(addr);
+        n = recvfrom(fdUDP, messageReceived, MESSAGE_SIZE - 1, 0, (struct sockaddr*) &addr, &addrlen);
+        if (n == -1) error(2);
+
+        fprintf(stderr, "STDERR: %s", messageReceived); // TO REMOVE
+
+        if (!strcmp(messageReceived, "RGR OK\n")) {
+            printf("User \"%s\" registered\n", token);
+            return token;
+        }
+        else if (!strcmp(messageReceived, "RGR NOK\n")) {
+            printf("ERR: Impossible to register user \"%s\" \n", token); 
+            return 0;
+        }
+        else { 
+            /*terminar graciosamente - ALTER*/
+            error(1);
+        }
+    }
+}
+
+char** topicList(int fdUDP, int *nTopics, char** tList) {
+
+    int n = 0, i = 0;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
+
+    memset(messageSent, '\0', MESSAGE_SIZE);
+
+    strcat(messageSent, "LTP"); strcat(messageSent, "\n");
+    fprintf(stderr, "%s", messageSent); // TO REMOVE
+
+    n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+    if (n == -1) error(2);
+    
+    addrlen = sizeof(addr);
+    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE - 2, 0, (struct sockaddr*) &addr, &addrlen);
+    if (n == -1) error(2);
+    if (n == MAXBUFFERSIZE - 2) {
+        error(3); //message too long, can't be fully recovered
+    }
+    messageReceived[n] = '\0';
+
+    fprintf(stderr, "%s", messageReceived); // TO REMOVE
+
+    if (!strcmp(messageReceived, "LTR 0\n")) {
+        printf("No topics are yet available\n");
+        return tList;
+    }
+
+    token = strtok(messageReceived, " ");
+    if (strcmp(messageReceived, "LTR")) {
+        error(2);
+    } 
+
+    if (*nTopics != 0) {
+        for (int i = 0; i < *nTopics; i++) {
+            free(tList[i]); 
+        }
+        free(tList);
+    }
+
+    token = strtok(NULL, " ");
+    *nTopics = atoi(token);
+    if (*nTopics == 0) {
+        error(2);
+    }
+
+    tList = (char**)malloc(sizeof(char*)*(atoi(token)));
+
+    while ((token = strtok(NULL, " \n")) != NULL) {
+        tList[i] = (char*)malloc(sizeof(char)*21);
+        strcpy(tList[i++], token); 
+    }
+    
+    //falta verificar se recebemos a resposta toda certa
+    return tList;
+}
+
+int selectTopicT(char* token, char** topicList, int nTopics) {
+
+    char* token2;
+
+    token = strtok(NULL, "\n");
+    if (token == NULL) {
+        printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
+        return -1;
+    }
+
+    for (int i = 0; i < nTopics; i++) {
+        token2 = strtok(topicList[i], ":");
+        if (!strcmp(token, token2)) {
+            printf("Topic selected: %d %s\n", i + 1, token2);
+            return i;
+        }
+    }
+
+    printf("ERR: Invalid topic selected\n");
+    return -1;
+}
+
+int selectTopicN(char* token, char** topicList, int nTopics) {
+
+    char* token2, n;
+
+    token = strtok(NULL, "\n");
+    if (token == NULL) {
+        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+        return -1;
+    }
+
+    n = atoi(token);
+    if ((n == 0) || (n < 0) || (n > nTopics)) {
+        printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
+        return -1;
+    }
+
+    printf("Topic selected: %d %s\n", n, strtok(topicList[i], ":"));
+    return n - 1;
+}
+
 int main(int argc, char **argv) {
 
-    int option, n = 0, p = 0, fdUDP, fdTCP;
-    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL;
-    int invalidCommandFlag, result_strcmp = -1;
+    int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, sTopic = -1;
+    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL,
+        buffer[128], messageSent[MESSAGE_SIZE], messageReceived[MESSAGE_SIZE], userID[MESSAGE_SIZE];
+    int invalidCommandFlag, result = -1;
     ssize_t s;
-    socklen_t addrlen;
-    struct addrinfo hints, *resUDP, *resTCP;
-    struct sockaddr_in addr;
-    char buffer[128], message_sent[MESSAGE_SIZE], message_received[MESSAGE_SIZE], userID[MAXUSERIDSIZE];
+    struct addrinfo hints;
+    char **tList;
+    memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageReceived, '\0', MESSAGE_SIZE);
+    memset(userID, '\0', MESSAGE_SIZE);
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option) {
@@ -76,7 +251,7 @@ int main(int argc, char **argv) {
 
     if (optind < argc) error(1);
     
-    printf("STDERR: %s %s %i\n", fsip, fsport, optind);
+    fprintf(stderr, "STDERR: %s %s %i\n", fsip, fsport, optind); // TO REMOVE
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
@@ -84,25 +259,21 @@ int main(int argc, char **argv) {
     hints.ai_flags = AI_NUMERICSERV;
 
     s = getaddrinfo(fsip, fsport, &hints, &resUDP);
-    if (s != 0) /*error*/ exit(1);
+    if (s != 0) error(2);
 
     fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol);
-    if (fdUDP == -1) /*error*/ exit(1);
+    if (fdUDP == -1) error(2);
 
     hints.ai_socktype = SOCK_STREAM;
 
     s = getaddrinfo(fsip, fsport, &hints, &resTCP);
-    if (s != 0) /*error*/ exit(1);
+    if (s != 0) error(2);
 
     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
-    if (fdTCP == -1) /*error*/ exit(1);
+    if (fdTCP == -1) error(2);
 
-    memset(message_sent, 0, MESSAGE_SIZE);
-    memset(message_received, 0, MESSAGE_SIZE);
-    memset(userID, 0, MAXUSERIDSIZE);
-
-    while (result_strcmp != Exit) {
-        result_strcmp = -1;
+    while (result != EXIT) {
+        result = -1;
         printf("Write command: ");
 
           // TODO substituir
@@ -110,127 +281,48 @@ int main(int argc, char **argv) {
         token = strtok(command, " \n"); 
 
         if (token != NULL) {
-            result_strcmp = command_strcmp(token);
+            result = command_strcmp(token);
         }
 
-        switch (result_strcmp) {
-            case Register:
-                invalidCommandFlag = 0;
-                token = strtok(NULL, "\n");
-
-                if (token != NULL && strlen(token) == 5) {
-                    for (int i = 0; i < 5; i++) {
-                        if (token[i] < '0' || token[i] > '9') {
-                            invalidCommandFlag = 1;
-                            printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
-                            break;
-                        }
-                    }
+        switch (result) {
+            case REG:
+                if (strlen(userID) != 5) {
+                    strcpy(userID, registerID(fdUDP, token));
                 }
                 else {
-                    invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
-                }
-
-                if (!invalidCommandFlag) {
-                    strcat(message_sent, "REG "); strcat(message_sent, token); strcat(message_sent, "\n");
-                    printf("STDERR: %s", message_sent);
-
-                    // mensagem vai toda de uma vez - aula 1/10
-                    n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-                    if (n == -1) /*error*/ exit(1);
-                    
-                    addrlen = sizeof(addr);
-                    n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-                    if (n == -1) /*error*/ exit(1);
-                    printf("STDERR: %s", message_received);
-
-                    if (!strcmp(message_received, "RGR OK\n")) {
-                        printf("User \"%s\" registered\n", token);
-                        strcpy(userID,token);
-                    }
-                    else if (!strcmp(message_received, "RGR NOK\n"))
-                        printf("User \"%s\" already exists\n", token);
-                    else
-                        /*terminar graciosamente*/
-                        return 0;
+                    printf("ERR: This client already has a user registered: %s\n", userID);
                 }
                 break;
 
-            case Topic_list:
-                invalidCommandFlag = 0;
-
+            case TL:
                 token = strtok(NULL, "\n");
-                if(token != NULL) {
-                    invalidCommandFlag = 1;
+                if (token != NULL) {
                     printf("ERR: Format incorrect. Should be: \"topic_list\" or \"ts\"\n");
                 }
-
-                if (!invalidCommandFlag) {
-                    strcat(message_sent, "LTP"); strcat(message_sent, "\n");
-                    fprintf(stderr, "%s", message_sent);
-                    n = sendto(fdUDP, message_sent, sizeof(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-	                if (n == -1) /*error*/ exit(1);
-                
-                    /*Esta mal. Necessita de conseguir receber cada topic, um a um*/
-                    addrlen = sizeof(addr);
-                    n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-                    if (n == -1) /*error*/ exit(1);
-                    fprintf(stderr, "%s", message_received);
-
-                    if (!strcmp(message_received, "LTR N\n"))
-                        printf("End of List");
-                    else if (!strcmp(message_received, "LTR 0\n"))
-                        printf("No topics are yet available\n");
-                    else
-                        /*terminar graciosamente*/
-                        return 0;
+                else { 
+                    tList = topicList(fdUDP, &nTopics, tList);
                 }
                 break;
             
-            case Topic_select:
-                invalidCommandFlag = 0;
-                token = strtok(NULL, " \n");
-
-                if (token == NULL) {
-                    invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
-                }
-
-                if(strtok(NULL, "\n") != NULL) {
-                    invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being an non-empty string\n");
-                }
-
-                if (!invalidCommandFlag) {
-                    /*guardar topic*/
-                }
-                break;
-            
-            case Ts:
-                invalidCommandFlag = 0;
-                token = strtok(NULL, "\n");
-
-                if (token != NULL) {
-                    for (int i = 0; token[i] != '\n'; i++) {
-                        if (token[i] < '0' || token[i] > '9') {
-                            invalidCommandFlag = 1;
-                            printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
-                            break;
-                        }
-                    }
+            case TST:
+                if ((nTopics) == 0) {
+                    printf("ERR: No topics available\n");
                 }
                 else {
-                    invalidCommandFlag = 1;
-                    printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being an integer\n");
-                }
-
-                if (!invalidCommandFlag) {
-                    /*guardar topic number*/
+                    sTopic = selectTopicT(token, tList, nTopics);
                 }
                 break;
             
-            case Topic_propose:
+            case TSN:
+                if ((nTopics) == 0) {
+                    printf("ERR: No topics available\n");
+                }
+                else {
+                    sTopic = selectTopicN(token, tList, nTopics);
+                }
+                break;
+            
+            case TP:
                 invalidCommandFlag = 0;
                 token = strtok(NULL, " \n");
 
@@ -252,25 +344,25 @@ int main(int argc, char **argv) {
 
                 if (!invalidCommandFlag) {
                     printf("topic: %s \n", token);
-                    strcat(message_sent, "PTP "); strcat(message_sent, userID); strcat(message_sent, " "); strcat(message_sent, token); strcat(message_sent, "\n");
-                    printf("STDERR: %s", message_sent);
+                    strcat(messageSent, "PTP "); strcat(messageSent, userID); strcat(messageSent, " "); strcat(messageSent, token); strcat(messageSent, "\n");
+                    printf("STDERR: %s", messageSent);
 
                     printf("help!\n");
-                    n = sendto(fdUDP, message_sent, strlen(message_sent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+                    n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
                     if (n == -1) /*error*/ exit(1);
                     
                     addrlen = sizeof(addr);
-                    n = recvfrom(fdUDP, message_received, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
+                    n = recvfrom(fdUDP, messageReceived, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
                     if (n == -1) /*error*/ exit(1);
-                    printf("STDERR: %s", message_received);
+                    printf("STDERR: %s", messageReceived);
 
-                    if (!strcmp(message_received, "PTR OK\n"))
+                    if (!strcmp(messageReceived, "PTR OK\n"))
                         printf("Topic \"%s\" successfully proposed\n", token);
-                    else if (!strcmp(message_received, "PTR DUP\n"))
+                    else if (!strcmp(messageReceived, "PTR DUP\n"))
                         printf("Topic \"%s\" already exists\n", token);
-                    else if (!strcmp(message_received, "PTR FUL\n"))
+                    else if (!strcmp(messageReceived, "PTR FUL\n"))
                         printf("Topic List is full\n");
-                    else if (!strcmp(message_received, "PTR NOK\n"))
+                    else if (!strcmp(messageReceived, "PTR NOK\n"))
                         printf("Proposal of topic \"%s\" was unnsuccesful\n", token);
                     else
                         /*terminar graciosamente*/
@@ -278,32 +370,30 @@ int main(int argc, char **argv) {
                 }
                 break;
 
-            case Question_list:
+            case QL:
                 break;
-            case Question_get:
+            case QGQ:
                 break;
-            case Qg:
+            case QGN:
                 break;
-            case Question_submit:
+            case QS:
                 break;
-            case Question_answer:
+            case QA:
                 break;
-            case Exit:
+            case EXIT:
                 break;
             default:
                 fprintf(stdout, "Command does not exist\n");
                 break;
         }
 
-        memset(message_sent, 0, MESSAGE_SIZE);
-        memset(message_received, 0, MESSAGE_SIZE);
-
-        /*while (token != NULL) {
-            printf("%s\n", token);
-            token = strtok(NULL, " ");
-        }*/
+        memset(messageSent, '\0', MESSAGE_SIZE);
+        memset(messageReceived, '\0', MESSAGE_SIZE);
     }
-
+    for (int i = 0; i < nTopics; i++) {
+        free(tList[i]); 
+    }
+    free(tList);
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
     close(fdUDP);
