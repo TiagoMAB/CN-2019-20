@@ -43,6 +43,14 @@ void error(int error) {
     }
 }
 
+void freeList(char** list, int listSize) {
+    for (int i = 0; i < listSize; i++) {
+        free(list[i]); 
+    }
+
+    free(list);
+}
+
 int command_strcmp(char *token) {
 
     char *opts[] = {"register", "reg", "topic_list", "tl", "topic_propose", 
@@ -149,10 +157,7 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
     }
 
     if (*nTopics != 0) {
-        for (int i = 0; i < *nTopics; i++) {
-            free(tList[i]); 
-        }
-        free(tList);
+        freeList(tList, *nTopics);
     }
 
     token = strtok(NULL, " ");
@@ -294,10 +299,7 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     } 
 
     if (*nQuestions != 0) {
-        for (int i = 0; i < *nQuestions; i++) {
-            free(qList[i]); 
-        }
-        free(qList);
+        freeList(qList, *nQuestions);
     }
 
     token = strtok(NULL, " ");
@@ -319,13 +321,12 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 
 int main(int argc, char **argv) {
 
-    int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1;
+    int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1, sQuestion = -1;
     char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL, userID[MAXUSERIDSIZE];
     int result = -1;
     ssize_t s;
     struct addrinfo hints;
-    char **tList;
-    char **qList;
+    char **tList, **qList;
 
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option) {
@@ -397,7 +398,7 @@ int main(int argc, char **argv) {
                 if (token != NULL) {
                     printf("ERR: Format incorrect. Should be: \"topic_list\" or \"tl\"\n");
                 }
-                else { 
+                else {
                     tList = topicList(fdUDP, &nTopics, tList);
                 }
                 break;
@@ -456,16 +457,10 @@ int main(int argc, char **argv) {
                 break;
         }
     }
-    
-    for (int i = 0; i < nTopics; i++) {
-        free(tList[i]); 
-    }
-    for (int i = 0; i < nQuestions; i++) {
-        free(qList[i]); 
-    }
 
-    free(tList);
-    free(qList);
+    freeList(tList, nTopics);
+    freeList(qList, nQuestions);
+
     freeaddrinfo(resUDP);
     freeaddrinfo(resTCP);
     close(fdUDP);
