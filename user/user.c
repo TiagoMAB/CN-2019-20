@@ -100,7 +100,7 @@ char* registerID(int fdUDP, char* token) {
         if (n == -1) error(2);
         
         addrlen = sizeof(addr);
-        n = recvfrom(fdUDP, messageReceived, MESSAGE_SIZE - 1, 0, (struct sockaddr*) &addr, &addrlen);
+        n = recvfrom(fdUDP, messageReceived, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
         if (n == -1) error(2);
 
         fprintf(stderr, "STDERR: %s", messageReceived); // TO REMOVE
@@ -131,7 +131,7 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
     if (n == -1) error(2);
     
     addrlen = sizeof(addr);
-    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE - 2, 0, (struct sockaddr*) &addr, &addrlen);
+    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE, 0, (struct sockaddr*) &addr, &addrlen);
     if (n == -1) error(2);
     if (n == MAXBUFFERSIZE - 2) error(3); //message too long, can't be fully recovered
     messageReceived[n] = '\0';
@@ -146,7 +146,7 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
     token = strtok(messageReceived, " ");
     if (strcmp(messageReceived, "LTR")) {
         error(2);
-    } 
+    }
 
     if (*nTopics != 0) {
         for (int i = 0; i < *nTopics; i++) {
@@ -161,10 +161,10 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
         error(2);
     }
 
-    tList = (char**)malloc(sizeof(char*)*(atoi(token)));
+    tList = (char**) malloc(sizeof(char*) * (*nTopics));
 
     while ((token = strtok(NULL, " \n")) != NULL) {
-        tList[i] = (char*)malloc(sizeof(char)*21);
+        tList[i] = (char*) malloc(sizeof(char) * 21);
         strcpy(tList[i++], token); 
     }
     
@@ -198,8 +198,8 @@ int selectTopicN(char* token, char** topicList, int nTopics) {
 
     char* token2, n;
 
-    token = strtok(NULL, " \n");
-    if ((token == NULL) || (strtok(NULL, "\n") != NULL) || (strlen(token) > 2)) {
+    token = strtok(NULL, "\n");
+    if ((token == NULL) || (strlen(token) > 2)) {
         printf("ERR: Format incorrect. Should be: \"ts topic_number\" with topic_number being a positive (>0) integer within the amount of topics\n");
         return -1;
     }
@@ -265,6 +265,7 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageReceived, '\0', MAXBUFFERSIZE);
 
     strcat(messageSent, "LQU "); strcat(messageSent, topic); strcat(messageSent, "\n");
     fprintf(stderr, "%s", messageSent); // TO REMOVE
@@ -273,7 +274,7 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     if (n == -1) error(2);
     
     addrlen = sizeof(addr);
-    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE - 2, 0, (struct sockaddr*) &addr, &addrlen);
+    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE, 0, (struct sockaddr*) &addr, &addrlen);
     if (n == -1) error(2);
     if (n == MAXBUFFERSIZE - 2) {
         error(3); //message too long, can't be fully recovered
@@ -305,11 +306,11 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
         error(2);
     }
 
-    qList = (char**)malloc(sizeof(char*)*(atoi(token)));
+    qList = (char**) malloc(sizeof(char*) * (*nQuestions));
 
     while ((token = strtok(NULL, " \n")) != NULL) {
-        qList[i] = (char*)malloc(sizeof(char)*21);
-        strcpy(qList[i++], token); 
+        qList[i] = (char*) malloc(sizeof(char) * 21);
+        strcpy(qList[i++], token);
     }
     
     //falta verificar se recebemos a resposta toda certa
