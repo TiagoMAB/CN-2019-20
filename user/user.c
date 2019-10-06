@@ -177,7 +177,7 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
     return tList;
 }
 
-int selectTopicT(char* token, char** topicList, int nTopics) {
+int selectTopicT(char* token, char** tList, int nTopics) {
 
     char* token2;
 
@@ -188,7 +188,7 @@ int selectTopicT(char* token, char** topicList, int nTopics) {
     }
 
     for (int i = 0; i < nTopics; i++) {
-        token2 = strtok(topicList[i], ":");
+        token2 = strtok(tList[i], ":");
         if (!strcmp(token, token2)) {
             printf("Topic selected: %d %s\n", i + 1, token2);
             return i;
@@ -199,7 +199,7 @@ int selectTopicT(char* token, char** topicList, int nTopics) {
     return -1;
 }
 
-int selectTopicN(char* token, char** topicList, int nTopics) {
+int selectTopicN(char* token, char** tList, int nTopics) {
 
     char* token2, n;
 
@@ -221,7 +221,7 @@ int selectTopicN(char* token, char** topicList, int nTopics) {
         return -1;
     }
 
-    printf("Topic selected: %d %s\n", n, strtok(topicList[n-1], ":"));
+    printf("Topic selected: %d %s\n", n, strtok(tList[n-1], ":"));
     return n - 1;
 }
 
@@ -266,6 +266,7 @@ void topicPropose(int fdUDP, char* token, char* userID) {
 }
 
 char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
+
     int n = 0, i = 0;
     char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
 
@@ -317,6 +318,61 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     
     //falta verificar se recebemos a resposta toda certa
     return qList;
+}
+
+void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qList) {
+
+    int n = 0, i , questionSelected;
+    ssize_t nBytes, nLeft, nWritten, nRead;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token2, *ptr = messageSent;
+
+    memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageReceived, '\0', MAXBUFFERSIZE);
+
+    token = strtok(NULL, " \n");
+    if ((token == NULL) || (strtok(NULL, "\n") != NULL)) {
+        printf("ERR: Format incorrect. Should be: \"question_get question\" with topic being a non-empty string\n");
+        return;
+    }
+
+    for (i = 0; i < nQuestions; i++) {
+        token2 = strtok(qList[i], ":");
+        if (!strcmp(token, token2)) {
+            printf("Question selected: %d %s\n", i + 1, token2);
+            questionSelected = i;
+            break;
+        }
+    }
+
+    if (i == nQuestions) {
+        printf("ERR: Invalid question selected\n");
+        return;
+    }
+
+    strcat(messageSent, "GQU "); strcat(messageSent, topic); strcat(messageSent, " "); strcat(messageSent, token); strcat(messageSent, "\n");
+
+    n = connect(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
+    if (n == -1) error(2);
+
+    nBytes = strlen(messageSent);
+    nLeft = nBytes;
+    while (nLeft > 0) {
+        nWritten = write(fdTCP, messageSent, nLeft);
+        if (nWritten <= 0) error(2);
+        nLeft -= nWritten;
+        ptr += nWritten;
+    }
+
+    i = 0;
+    ptr = messageReceived;
+    while (i < MAXBUFFERSIZE && read(fdTCP, ptr, 1)) {
+        if (messageReceived[i] == '\n')
+            break;
+        
+        i++; ptr++;
+    }
+
+    printf("%s", messageReceived);
 }
 
 int main(int argc, char **argv) {
@@ -401,6 +457,7 @@ int main(int argc, char **argv) {
                 else {
                     tList = topicList(fdUDP, &nTopics, tList);
                 }
+
                 break;
             
             case TOPIC_SELECT:
@@ -411,8 +468,10 @@ int main(int argc, char **argv) {
                     sTopic = selectTopicT(token, tList, nTopics);
                 }
 
-                if (nQuestions > 0)
+                if (nQuestions > 0) {
                     freeList(qList, nQuestions);
+                    nQuestions = 0;
+                }
 
                 break;
             
@@ -424,8 +483,10 @@ int main(int argc, char **argv) {
                     sTopic = selectTopicN(token, tList, nTopics);
                 }
 
-                if (nQuestions > 0)
+                if (nQuestions > 0) {
                     freeList(qList, nQuestions);
+                    nQuestions = 0;
+                }
                 
                 break;
             
@@ -436,6 +497,7 @@ int main(int argc, char **argv) {
                 else {
                     printf("ERR: Missing information. No user has been registered\n");
                 }
+
                 break;
 
             case QUESTION_LIST:
@@ -443,15 +505,28 @@ int main(int argc, char **argv) {
                 if ((token != NULL)) {
                     printf("ERR: Format incorrect. Should be: \"question_list\" or \"ql\"\n");
                 }
-                else if(sTopic == -1){
+                else if(sTopic == -1) {
                     printf("ERR: Missing information. No topic has been selected\n");
                 }
                 else { 
                     qList = questionList(fdUDP, &nQuestions, tList[sTopic], qList);
                 }
+
                 break;
+
             case QUESTION_GET:
+                if (sTopic == -1) {
+                    printf("ERR: Missing information. No topic has been selected\n");
+                }
+                else if (nQuestions == 0) {
+                    printf("ERR: Execute the question_list instruction first\n");
+                }
+                else {
+                    questionGet(fdTCP, token, tList[sTopic], nQuestions, qList);
+                }
+
                 break;
+
             case QG:
                 break;
             case QUESTION_SUBMIT:
