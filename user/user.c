@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #define PORT "58020"
 #define MAXBUFFERSIZE 4096
@@ -22,6 +23,7 @@ enum options {  REGISTER, TOPIC_LIST, TOPIC_PROPOSE, QUESTION_LIST, QUESTION_SUB
 socklen_t addrlen;
 struct sockaddr_in addr;
 struct addrinfo *resUDP, *resTCP;
+int connectedTCP = 0;
 
 void error(int error) {
     
@@ -322,9 +324,10 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 
 void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qList) {
 
-    int n = 0, i , questionSelected;
+    int n = 0, i, questionSelected, questionSize;
     ssize_t nBytes, nLeft, nWritten, nRead;
     char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token2, *ptr = messageSent;
+    FILE *fp;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
     memset(messageReceived, '\0', MAXBUFFERSIZE);
@@ -365,19 +368,45 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
 
     i = 0;
     ptr = messageReceived;
-    while (i < MAXBUFFERSIZE && read(fdTCP, ptr, 1)) {
-        if (messageReceived[i] == '\n')
-            break;
-        
+    while (i < MAXBUFFERSIZE && read(fdTCP, ptr, 1) != -1) {        
         i++; ptr++;
     }
 
     printf("%s", messageReceived);
+
+    if (!strcmp(messageReceived, "QGR EOF\n")) {
+        printf("No such query or topic are available\n");
+        return;
+    }
+
+    if (!strcmp(messageReceived, "QGR ERR\n")) {
+        printf("Request formulated incorrectly\n");
+        return;
+    }
+
+    strtok(messageReceived, " "); strtok(NULL, " ");
+    questionSize = atoi(strtok(NULL, " "));
+    token2 = strtok(NULL, "\n");
+
+    mkdir(strcat(topic, ".txt"), 0777);
+
+    fp = fopen(strcat(qList[questionSelected], ".txt"), "w");
+    fwrite(token2 , 1 , sizeof(token2) , fp);
+    fclose(fp);
+
+    if (strtok(NULL, " ") == "1") {
+        ; // codigo das imagens
+    }
+
+    n = atoi(token);
+    for (i = 0; i < n; i++) {
+        ; // codigo das respostas
+    }
 }
 
 int main(int argc, char **argv) {
 
-    int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1, sQuestion = -1;
+    int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1;
     char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL, userID[MAXUSERIDSIZE];
     int result = -1;
     ssize_t s;
@@ -415,14 +444,6 @@ int main(int argc, char **argv) {
 
     fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol);
     if (fdUDP == -1) error(2);
-
-    hints.ai_socktype = SOCK_STREAM;
-
-    s = getaddrinfo(fsip, fsport, &hints, &resTCP);
-    if (s != 0) error(2);
-
-    fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
-    if (fdTCP == -1) error(2);
     
     memset(userID, '\0', MAXUSERIDSIZE);
     memset(command, '\0', MAXBUFFERSIZE);
@@ -522,7 +543,16 @@ int main(int argc, char **argv) {
                     printf("ERR: Execute the question_list instruction first\n");
                 }
                 else {
+                    hints.ai_socktype = SOCK_STREAM;
+
+                    s = getaddrinfo(fsip, fsport, &hints, &resTCP);
+                    if (s != 0) error(2);
+
+                    fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
+                    if (fdTCP == -1) error(2);
                     questionGet(fdTCP, token, tList[sTopic], nQuestions, qList);
+                    freeaddrinfo(resTCP);
+                    close(fdTCP);
                 }
 
                 break;
@@ -539,15 +569,15 @@ int main(int argc, char **argv) {
                 fprintf(stdout, "Command does not exist\n");
                 break;
         }
+
+        memset(command, 0, sizeof(command));
     }
 
     freeList(tList, nTopics);
     freeList(qList, nQuestions);
 
     freeaddrinfo(resUDP);
-    freeaddrinfo(resTCP);
     close(fdUDP);
-    close(fdTCP);
 
     return 0;
 }
