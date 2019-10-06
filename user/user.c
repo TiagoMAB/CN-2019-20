@@ -326,7 +326,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
 
     int n = 0, i, questionSelected, questionSize;
     ssize_t nBytes, nLeft, nWritten, nRead;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token2, *ptr = messageSent;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token2, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", answerFile[MESSAGE_SIZE];
     FILE *fp;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
@@ -388,20 +388,30 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     questionSize = atoi(strtok(NULL, " "));
     token2 = strtok(NULL, "\n");
 
-    mkdir(strcat(topic, ".txt"), 0777);
+    mkdir(topic, 0777);
 
-    fp = fopen(strcat(qList[questionSelected], ".txt"), "w");
-    fwrite(token2 , 1 , sizeof(token2) , fp);
+    memset(folderPath, '\0', sizeof(folderPath));
+    strcpy(folderPath, topic); strcat(folderPath, "/");
+
+    fp = fopen(strcat(strcat(folderPath, qList[questionSelected]), ".txt"), "w");
+    printf("%i\n", sizeof(token2));
+    fwrite(token2, 1, strlen(token2) , fp);
     fclose(fp);
 
     if (strtok(NULL, " ") == "1") {
         ; // codigo das imagens
     }
 
-    n = atoi(token);
+    n = atoi(strtok(NULL, " "));
+    /*
     for (i = 0; i < n; i++) {
-        ; // codigo das respostas
-    }
+        memset(answerFile, '\0', sizeof(answerFile));
+        strcat(answerFile, folderPath);
+
+        token2 = strtok(NULL, "");
+
+        fp = fopen(); // codigo das respostas
+    }*/
 }
 
 int main(int argc, char **argv) {
