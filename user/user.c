@@ -410,6 +410,10 @@ int main(int argc, char **argv) {
                 else {
                     sTopic = selectTopicT(token, tList, nTopics);
                 }
+
+                if (nQuestions > 0)
+                    freeList(qList, nQuestions);
+
                 break;
             
             case TS:
@@ -419,6 +423,10 @@ int main(int argc, char **argv) {
                 else {
                     sTopic = selectTopicN(token, tList, nTopics);
                 }
+
+                if (nQuestions > 0)
+                    freeList(qList, nQuestions);
+                
                 break;
             
             case TOPIC_PROPOSE:
