@@ -324,9 +324,9 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 
 void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qList) {
 
-    int n = 0, i, questionSelected, questionSize;
+    int n = 0, i, questionSelected, totalSize, size, answerNumber;
     ssize_t nBytes, nLeft, nWritten, nRead;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token2, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", answerFile[MESSAGE_SIZE];
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token2, *token3, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", fileContent[MAXBUFFERSIZE];
     FILE *fp;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
@@ -368,7 +368,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
 
     i = 0;
     ptr = messageReceived;
-    while (i < MAXBUFFERSIZE && read(fdTCP, ptr, 1) != -1) {        
+    while (i < MAXBUFFERSIZE && read(fdTCP, ptr, 1) != -1) {
         i++; ptr++;
     }
 
@@ -385,8 +385,10 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     }
 
     strtok(messageReceived, " "); strtok(NULL, " ");
-    questionSize = atoi(strtok(NULL, " "));
-    token2 = strtok(NULL, "\n");
+    totalSize = atoi(strtok(NULL, " "));
+    token2 = strtok(NULL, "");
+
+    printf("%s", token2);
 
     mkdir(topic, 0777);
 
@@ -394,20 +396,40 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     strcpy(folderPath, topic); strcat(folderPath, "/");
 
     fp = fopen(strcat(strcat(folderPath, qList[questionSelected]), ".txt"), "w");
-    printf("%i\n", sizeof(token2));
-    fwrite(token2, 1, strlen(token2) , fp);
+
+    memset(fileContent, '\0', MAXBUFFERSIZE);
+    ptr = token2;
+
+    size = totalSize;
+    while (size > MAXBUFFERSIZE) {
+        fwrite(ptr, 1, MAXBUFFERSIZE, fp);
+        ptr += MAXBUFFERSIZE;
+        size -= MAXBUFFERSIZE;
+    }
+
+    fwrite(ptr, 1, size , fp);
     fclose(fp);
 
-    if (strtok(NULL, " ") == "1") {
+    // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
+
+    /*
+    token2 = strtok(NULL, "");
+    
+    printf("%s\n", token2);
+    memset(fileContent, '\0', MAXBUFFERSIZE);
+
+    if (!strcmp(strtok(NULL, " "), "1")) {
         ; // codigo das imagens
     }
 
     n = atoi(strtok(NULL, " "));
-    /*
+    
+    
+    memset(fileContent, '\0', MAXBUFFERSIZE);
+    strcat(fileContent, folderPath);
+    
+    
     for (i = 0; i < n; i++) {
-        memset(answerFile, '\0', sizeof(answerFile));
-        strcat(answerFile, folderPath);
-
         token2 = strtok(NULL, "");
 
         fp = fopen(); // codigo das respostas
