@@ -12,6 +12,7 @@
 
 #define PORT "58020"
 #define MAXBUFFERSIZE 4096
+#define MAXMAXBUFFERSIZE 1000000
 #define MESSAGE_SIZE 30
 #define MAXUSERIDSIZE 5 + 1
 
@@ -343,12 +344,12 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
 
     int n = 0, i, questionSelected, totalSize, size, answerNumber;
     ssize_t nBytes, nLeft, nWritten, nRead;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", messageSave[MAXBUFFERSIZE], *token2, *qiext, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", 
-         fileContent[MAXBUFFERSIZE];
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXMAXBUFFERSIZE] = "", messageSave[MAXMAXBUFFERSIZE], *token2, *qiext, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", 
+         fileContent[MAXMAXBUFFERSIZE];
     FILE *fp;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
-    memset(messageReceived, '\0', MAXBUFFERSIZE);
+    memset(messageReceived, '\0', MAXMAXBUFFERSIZE);
 
     token = strtok(NULL, " \n");
     if ((token == NULL) || (strtok(NULL, "\n") != NULL)) {
@@ -384,7 +385,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
         ptr += nWritten;
     }
 
-    nLeft = MAXBUFFERSIZE; ptr = messageReceived;
+    nLeft = MAXMAXBUFFERSIZE; ptr = messageReceived;
     while (nLeft > 0) {
         nRead = read(fdTCP, ptr, nLeft);
         if (nRead == -1) error(2);
@@ -406,7 +407,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     }
 
     ptr = messageReceived;
-    memset(messageSave, '\0', MAXBUFFERSIZE);
+    memset(messageSave, '\0', MAXMAXBUFFERSIZE);
     strcpy(messageSave, messageReceived);
     i = 0;
 
@@ -424,7 +425,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     i += strlen(token2) + 1;
 
     ptr = messageSave + i;
-    memset(fileContent, '\0', MAXBUFFERSIZE);
+    memset(fileContent, '\0', MAXMAXBUFFERSIZE);
     memcpy(fileContent, ptr, totalSize);
     i += totalSize + 1;
 
@@ -455,18 +456,22 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
         totalSize = atoi(token2);
         ptr = messageSave + i;
 
-        printf("%s\n", ptr);
-/*
         memset(fileContent, '\0', MAXBUFFERSIZE);
-        memcpy(fileContent, ptr + i, totalSize);
+        memcpy(fileContent, ptr, totalSize);
         i += totalSize + 1;
         ptr = messageSave + i;
 
-        fp = fopen(strcat(strcat(folderPath, qList[questionSelected]), strcat(".", qiext)), "w");
+        
+        memset(folderPath, '\0', sizeof(folderPath));
+        strcpy(folderPath, topic); strcat(folderPath, "/");
+        strcat(folderPath, qList[questionSelected]);
+        strcat(folderPath, ".");
+        strcat(folderPath, qiext);
+        fp = fopen(folderPath, "wb");
 
         fwrite(fileContent, 1, totalSize, fp);
 
-        fclose(fp);*/
+        fclose(fp);
     }
     else if (strcmp(token2, "0")) error(2);
 }
