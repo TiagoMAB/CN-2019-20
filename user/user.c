@@ -343,7 +343,8 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
 
     int n = 0, i, questionSelected, totalSize, size, answerNumber;
     ssize_t nBytes, nLeft, nWritten, nRead;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token2, *token3, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", fileContent[MAXBUFFERSIZE];
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", messageSave[MAXBUFFERSIZE], *token2, *qiext, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", 
+         fileContent[MAXBUFFERSIZE];
     FILE *fp;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
@@ -392,7 +393,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
         ptr += nRead;
     }
 
-    printf("%s\n%d\n", messageReceived, i);
+    printf("\n%s\n", messageReceived);
 
     if (!strcmp(messageReceived, "QGR EOF\n")) {
         printf("No such query or topic are available\n");
@@ -405,8 +406,10 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     }
 
     ptr = messageReceived;
+    memset(messageSave, '\0', MAXBUFFERSIZE);
+    strcpy(messageSave, messageReceived);
     i = 0;
-    
+
     token2 = strtok(messageReceived, " ");
     if (strcmp(token2, "QGR")) error(2);
     i += 4;
@@ -415,17 +418,15 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     if (!checkIfUserID(token2)) error(2);
     i += 6;
 
-    // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
-
     token2 = strtok(NULL, " ");
     if (!checkIfNumber(token2)) error(2);
     totalSize = atoi(token2);
     i += strlen(token2) + 1;
 
+    ptr = messageSave + i;
     memset(fileContent, '\0', MAXBUFFERSIZE);
-    memcpy(fileContent, messageReceived + i, totalSize);
+    memcpy(fileContent, ptr, totalSize);
     i += totalSize + 1;
-    ptr = messageReceived + i;
 
     mkdir(topic, 0777);
     memset(folderPath, '\0', sizeof(folderPath));
@@ -438,28 +439,36 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
 
     // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
 
-    /*
-    token2 = strtok(NULL, "");
-    
-    printf("%s\n", token2);
-    memset(fileContent, '\0', MAXBUFFERSIZE);
+    ptr = messageSave + i;
+    token2 = strtok(ptr, " ");
+    i += 2;
 
-    if (!strcmp(strtok(NULL, " "), "1")) {
-        ; // codigo das imagens
+    if (!strcmp(token2, "1")) {
+        //image code
+        qiext = strtok(NULL, " ");
+        if (strlen(qiext) != 3) error(2);
+        i += 4;
+
+        token2 = strtok(NULL, " ");
+        if (!checkIfNumber(token2)) error(2);
+        i += strlen(token2) + 1;
+        totalSize = atoi(token2);
+        ptr = messageSave + i;
+
+        printf("%s\n", ptr);
+/*
+        memset(fileContent, '\0', MAXBUFFERSIZE);
+        memcpy(fileContent, ptr + i, totalSize);
+        i += totalSize + 1;
+        ptr = messageSave + i;
+
+        fp = fopen(strcat(strcat(folderPath, qList[questionSelected]), strcat(".", qiext)), "w");
+
+        fwrite(fileContent, 1, totalSize, fp);
+
+        fclose(fp);*/
     }
-
-    n = atoi(strtok(NULL, " "));
-    
-    
-    memset(fileContent, '\0', MAXBUFFERSIZE);
-    strcat(fileContent, folderPath);
-    
-    
-    for (i = 0; i < n; i++) {
-        token2 = strtok(NULL, "");
-
-        fp = fopen(); // codigo das respostas
-    }*/
+    else if (strcmp(token2, "0")) error(2);
 }
 
 int main(int argc, char **argv) {
