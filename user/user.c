@@ -74,6 +74,33 @@ int command_strcmp(char *token) {
     return i;
 }
 
+int checkIfNumber(char* token) {
+    int size;
+
+    if (token != NULL) {
+        size = strlen(token);
+        for (int i = 0; i < size; i++) {
+            if (token[i] < '0' || token[i] > '9') {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
+int checkIfUserID(char* token) {
+    if (token != NULL && strlen(token) == 5) {
+        for (int i = 0; i < 5; i++) {
+            if (token[i] < '0' || token[i] > '9') {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
 char* registerID(int fdUDP, char* token) {
 
     int invalid = 0, n = 0;
@@ -84,17 +111,7 @@ char* registerID(int fdUDP, char* token) {
 
     // Verifies validity of userID introduced
     token = strtok(NULL, "\n");
-    if (token != NULL && strlen(token) == 5) {
-        for (int i = 0; i < 5; i++) {
-            if (token[i] < '0' || token[i] > '9') {
-                invalid = 1;
-                printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
-                return "";
-            }
-        }
-    }
-    else {
-        invalid = 1;
+    if (!checkIfUserID(token)) {
         printf("ERR: Format incorrect. Should be: \"register userID\" or \"reg userID\" with userID between 00000 and 99999\n");
         return "";
     }
@@ -366,13 +383,16 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
         ptr += nWritten;
     }
 
-    i = 0;
-    ptr = messageReceived;
-    while (i < MAXBUFFERSIZE && read(fdTCP, ptr, 1) != -1) {
-        i++; ptr++;
+    nLeft = MAXBUFFERSIZE; ptr = messageReceived;
+    while (nLeft > 0) {
+        nRead = read(fdTCP, ptr, nLeft);
+        if (nRead == -1) error(2);
+        else if (nRead == 0) break;
+        nLeft -= nRead;
+        ptr += nRead;
     }
 
-    printf("%s", messageReceived);
+    printf("%s\n%d\n", messageReceived, i);
 
     if (!strcmp(messageReceived, "QGR EOF\n")) {
         printf("No such query or topic are available\n");
@@ -384,30 +404,36 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
         return;
     }
 
-    strtok(messageReceived, " "); strtok(NULL, " ");
-    totalSize = atoi(strtok(NULL, " "));
-    token2 = strtok(NULL, "");
+    ptr = messageReceived;
+    i = 0;
+    
+    token2 = strtok(messageReceived, " ");
+    if (strcmp(token2, "QGR")) error(2);
+    i += 4;
 
-    printf("%s", token2);
+    token2 = strtok(NULL, " ");
+    if (!checkIfUserID(token2)) error(2);
+    i += 6;
 
-    mkdir(topic, 0777);
+    // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
 
-    memset(folderPath, '\0', sizeof(folderPath));
-    strcpy(folderPath, topic); strcat(folderPath, "/");
-
-    fp = fopen(strcat(strcat(folderPath, qList[questionSelected]), ".txt"), "w");
+    token2 = strtok(NULL, " ");
+    if (!checkIfNumber(token2)) error(2);
+    totalSize = atoi(token2);
+    i += strlen(token2) + 1;
 
     memset(fileContent, '\0', MAXBUFFERSIZE);
-    ptr = token2;
+    memcpy(fileContent, messageReceived + i, totalSize);
+    i += totalSize + 1;
+    ptr = messageReceived + i;
 
-    size = totalSize;
-    while (size > MAXBUFFERSIZE) {
-        fwrite(ptr, 1, MAXBUFFERSIZE, fp);
-        ptr += MAXBUFFERSIZE;
-        size -= MAXBUFFERSIZE;
-    }
+    mkdir(topic, 0777);
+    memset(folderPath, '\0', sizeof(folderPath));
+    strcpy(folderPath, topic); strcat(folderPath, "/");
+    fp = fopen(strcat(strcat(folderPath, qList[questionSelected]), ".txt"), "w");
 
-    fwrite(ptr, 1, size , fp);
+    fwrite(fileContent, 1, totalSize, fp);
+
     fclose(fp);
 
     // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
