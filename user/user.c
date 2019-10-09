@@ -12,7 +12,7 @@
 
 #define PORT "58020"
 #define MAXBUFFERSIZE 4096
-#define MAXMAXBUFFERSIZE 1000000
+#define MAXMAXBUFFERSIZE 2000000
 #define MESSAGE_SIZE 30
 #define MAXUSERIDSIZE 5 + 1
 
@@ -340,9 +340,74 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     return qList;
 }
 
+char* questionGetAux(char* topic, char* ptr, char* messageSave, char* fileContent, char* folderPath, char* question, int *i) {
+    char *token, *qiext, filename[MAXBUFFERSIZE];
+    int totalSize;
+    FILE* fp;
+    token = strtok(NULL, " ");
+
+    if (!checkIfNumber(token)) error(2);
+    
+    totalSize = atoi(token);
+    *i += strlen(token) + 1;
+
+    ptr = messageSave + *i;
+    memset(fileContent, '\0', MAXMAXBUFFERSIZE);
+    memcpy(fileContent, ptr, totalSize);
+    *i += totalSize + 1;
+
+    strcpy(filename, folderPath);
+    strcpy(filename, topic); strcat(filename, "/");
+    fp = fopen(strcat(strcat(filename, question), ".txt"), "w");
+
+    fwrite(fileContent, 1, totalSize, fp);
+
+    fclose(fp);
+
+    // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
+
+    ptr = messageSave + *i;
+    token = strtok(ptr, " ");
+    *i += 2;
+    ptr += 2;
+
+    if (!strcmp(token, "1")) {
+        //image code, image not saving correctly
+        qiext = strtok(NULL, " ");
+        if (strlen(qiext) != 3) error(2);
+        *i += 4;
+
+        token = strtok(NULL, " ");
+        if (!checkIfNumber(token)) error(2);
+        *i += strlen(token) + 1;
+        totalSize = atoi(token);
+        ptr = messageSave + *i;
+
+        memset(fileContent, '\0', MAXBUFFERSIZE);
+        memcpy(fileContent, ptr, totalSize);
+        *i += totalSize + 1;
+        
+        memset(folderPath, '\0', sizeof(folderPath));
+        strcpy(folderPath, topic); strcat(folderPath, "/");
+        strcat(folderPath, question);
+        strcat(folderPath, ".");
+        strcat(folderPath, qiext);
+        fp = fopen(folderPath, "wb");
+
+        fwrite(fileContent, 1, totalSize, fp);
+
+        fclose(fp);
+        ptr = messageSave + *i;
+        return ptr;
+    }
+    else if (strcmp(token, "0")) error(2);
+
+    return ptr;
+}
+
 void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qList) {
 
-    int n = 0, i, questionSelected, totalSize, size, answerNumber;
+    int n = 0, i, questionSelected, totalSize, size, nAnswers;
     ssize_t nBytes, nLeft, nWritten, nRead;
     char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXMAXBUFFERSIZE] = "", messageSave[MAXMAXBUFFERSIZE], *token2, *qiext, *ptr = messageSent, folderPath[MESSAGE_SIZE] = "", 
          fileContent[MAXMAXBUFFERSIZE];
@@ -410,7 +475,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     memset(messageSave, '\0', MAXMAXBUFFERSIZE);
     strcpy(messageSave, messageReceived);
     i = 0;
-
+    
     token2 = strtok(messageReceived, " ");
     if (strcmp(token2, "QGR")) error(2);
     i += 4;
@@ -419,61 +484,24 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     if (!checkIfUserID(token2)) error(2);
     i += 6;
 
-    token2 = strtok(NULL, " ");
+    mkdir(topic, 0777);
+
+    ptr = questionGetAux(topic, ptr, messageSave, fileContent, folderPath, qList[questionSelected], &i);
+    token2 = strtok(ptr, " ");
+
+    printf("\n%s\n", token2);
+    
     if (!checkIfNumber(token2)) error(2);
-    totalSize = atoi(token2);
+
     i += strlen(token2) + 1;
 
-    ptr = messageSave + i;
-    memset(fileContent, '\0', MAXMAXBUFFERSIZE);
-    memcpy(fileContent, ptr, totalSize);
-    i += totalSize + 1;
-
-    mkdir(topic, 0777);
-    memset(folderPath, '\0', sizeof(folderPath));
-    strcpy(folderPath, topic); strcat(folderPath, "/");
-    fp = fopen(strcat(strcat(folderPath, qList[questionSelected]), ".txt"), "w");
-
-    fwrite(fileContent, 1, totalSize, fp);
-
-    fclose(fp);
-
-    // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
-
-    ptr = messageSave + i;
-    token2 = strtok(ptr, " ");
-    i += 2;
-
-    if (!strcmp(token2, "1")) {
-        //image code
-        qiext = strtok(NULL, " ");
-        if (strlen(qiext) != 3) error(2);
-        i += 4;
-
-        token2 = strtok(NULL, " ");
-        if (!checkIfNumber(token2)) error(2);
-        i += strlen(token2) + 1;
-        totalSize = atoi(token2);
-        ptr = messageSave + i;
-
-        memset(fileContent, '\0', MAXBUFFERSIZE);
-        memcpy(fileContent, ptr, totalSize);
-        i += totalSize + 1;
-        ptr = messageSave + i;
-
-        
-        memset(folderPath, '\0', sizeof(folderPath));
-        strcpy(folderPath, topic); strcat(folderPath, "/");
-        strcat(folderPath, qList[questionSelected]);
-        strcat(folderPath, ".");
-        strcat(folderPath, qiext);
-        fp = fopen(folderPath, "wb");
-
-        fwrite(fileContent, 1, totalSize, fp);
-
-        fclose(fp);
+    nAnswers = atoi(token2);
+    if (nAnswers > 10) error(2);
+    
+    while (nAnswers) {/*
+        ptr = questionGetAux(topic, ptr, messageSave, fileContent, folderPath, questionSelected, &i);*/
+        nAnswers -= 1;
     }
-    else if (strcmp(token2, "0")) error(2);
 }
 
 int main(int argc, char **argv) {
