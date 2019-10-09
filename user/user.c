@@ -340,14 +340,29 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     return qList;
 }
 
-char* questionGetAux(char* topic, char* ptr, char* messageSave, char* fileContent, char* folderPath, char* question, int *i) {
-    char *token, *qiext, filename[MAXBUFFERSIZE];
+char* questionGetAux(int isAnswer, char* topic, char* ptr, char* messageSave, char* fileContent, char* folderPath, char* question, int *i) {
+    char *token, *extension, filename[MAXBUFFERSIZE], *an;
     int totalSize;
     FILE* fp;
+
     token = strtok(NULL, " ");
 
+    if (isAnswer) {
+        if (!checkIfNumber(token)) error(2);
+        printf("%s\n", token);
+        an = token;
+        if (atoi(an) < 0 || atoi(an) > 10) error(2);
+
+        *i += strlen(an) + 1;
+
+        token = strtok(NULL, " ");
+    }
+
+    if (!checkIfUserID(token)) error(2);
+    *i += 6;
+
+    token = strtok(NULL, " ");
     if (!checkIfNumber(token)) error(2);
-    
     totalSize = atoi(token);
     *i += strlen(token) + 1;
 
@@ -358,7 +373,13 @@ char* questionGetAux(char* topic, char* ptr, char* messageSave, char* fileConten
 
     strcpy(filename, folderPath);
     strcpy(filename, topic); strcat(filename, "/");
-    fp = fopen(strcat(strcat(filename, question), ".txt"), "w");
+    strcat(filename, question);
+
+    if (isAnswer) {
+        strcat(filename, "_"); strcat(filename, an);
+    }
+
+    fp = fopen(strcat(filename, ".txt"), "w");
 
     fwrite(fileContent, 1, totalSize, fp);
 
@@ -373,8 +394,8 @@ char* questionGetAux(char* topic, char* ptr, char* messageSave, char* fileConten
 
     if (!strcmp(token, "1")) {
         //image code, image not saving correctly
-        qiext = strtok(NULL, " ");
-        if (strlen(qiext) != 3) error(2);
+        extension = strtok(NULL, " ");
+        if (strlen(extension) != 3) error(2);
         *i += 4;
 
         token = strtok(NULL, " ");
@@ -391,7 +412,7 @@ char* questionGetAux(char* topic, char* ptr, char* messageSave, char* fileConten
         strcpy(folderPath, topic); strcat(folderPath, "/");
         strcat(folderPath, question);
         strcat(folderPath, ".");
-        strcat(folderPath, qiext);
+        strcat(folderPath, extension);
         fp = fopen(folderPath, "wb");
 
         fwrite(fileContent, 1, totalSize, fp);
@@ -480,26 +501,26 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     if (strcmp(token2, "QGR")) error(2);
     i += 4;
 
-    token2 = strtok(NULL, " ");
-    if (!checkIfUserID(token2)) error(2);
-    i += 6;
-
     mkdir(topic, 0777);
 
-    ptr = questionGetAux(topic, ptr, messageSave, fileContent, folderPath, qList[questionSelected], &i);
+    ptr = questionGetAux(0, topic, ptr, messageSave, fileContent, folderPath, qList[questionSelected], &i);
     token2 = strtok(ptr, " ");
-
-    printf("\n%s\n", token2);
     
-    if (!checkIfNumber(token2)) error(2);
+    // failsafe for current code where image doesn't work
+    if (token2 == NULL) error(2);
+
+    if (!strcmp(token2, "0\n")) {
+        return;
+    }
+    else if (!checkIfNumber(token2)) error(2);
 
     i += strlen(token2) + 1;
 
     nAnswers = atoi(token2);
     if (nAnswers > 10) error(2);
     
-    while (nAnswers) {/*
-        ptr = questionGetAux(topic, ptr, messageSave, fileContent, folderPath, questionSelected, &i);*/
+    while (nAnswers) {
+        ptr = questionGetAux(1, topic, ptr, messageSave, fileContent, folderPath, qList[questionSelected], &i);
         nAnswers -= 1;
     }
 }
