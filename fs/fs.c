@@ -38,33 +38,53 @@ void error(int error) {
     }
 }
 
+int checkUser(char* id) {
+
+    if (id != NULL && strlen(id) == 5) {
+        for (int i = 0; i < 5; i++) {
+            if (id[i] < '0' || id[i] > '9') {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
 char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    int size = 1, data;
+    int size = 4, data;
 
     buffer = (char*) malloc(sizeof(char)*size);
     *addrlen = sizeof(addr);
+    printf("STDERR: Buffer progression: %d", size);
 
-    data = recvfrom(fdUDP, buffer, size, MSG_PEEK, (struct sockaddr*)addr, addrlen);
-    while (data == size) {
+    do {
         free(buffer);
         size *= 2;
+        printf("  %d", size);
+        
         buffer = (char*) malloc(sizeof(char)*size);
-        data = recvfrom(fdUDP, buffer, size, MSG_PEEK, (struct sockaddr*)addr, addrlen);
-    }
+        data = recvfrom(fdUDP, buffer, size - 1, MSG_PEEK, (struct sockaddr*)addr, addrlen);
+        buffer[size-1] = '\0'; 
+    } while (strlen(buffer) == size - 1);
+
+    free(buffer);
+    buffer = (char*) malloc(sizeof(char)*(data+1));
+    data = recvfrom(fdUDP, buffer, data, 0, (struct sockaddr*)addr, addrlen);
     buffer[data] = '\0';
-    
+
+    printf("\nSTDERR: | Size: %ld | data: %d | MESSAGE RECEIVED: %s", strlen(buffer), data, buffer);
     return buffer;
 }
 
 void sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen) {
 
     int n;
-    printf("%s - %ld", buffer, strlen(buffer));
     addrlen = sizeof(addr);
     n = sendto(fdUDP, buffer, strlen(buffer), 0, (struct sockaddr*)&addr, addrlen);
     if (n == -1) error(2);
-    printf("Message sent: %s", buffer);
+    printf("STDERR: Size: %ld | MESSAGE SENT: %s", strlen(buffer), buffer);
 }
 
 int checkProtocol(char* token) {
@@ -82,53 +102,91 @@ int checkProtocol(char* token) {
 
 char* reg(char* buffer) {
 
-    char* token = strtok(NULL, "\n"); 
-    
-    free(buffer);
-    buffer = (char*)malloc(sizeof(char)*9);
+    char* id;
+    char* answer = (char*)malloc(sizeof(char)*9);
 
-    strcpy(buffer, "RGR NOK\n");
-    if (token != NULL && strlen(token) == 5) {
-        for (int i = 0; i < 5; i++) {
-            if (token[i] < '0' || token[i] > '9') {
-                return buffer;
-            }
-        }
-        strcpy(buffer, "RGR OK\n");
+    strcpy(answer, "RGR NOK\n");
+    strtok(buffer, " ");    
+    id = strtok(NULL, "\n"); 
+    
+    if (checkUser(id)) {
+        strcpy(answer, "RGR OK\n");
     }
-    return buffer;
+
+    free(buffer);
+    return answer;
 }
 
 char* ltp(char* buffer) {
 
-    char* token = strtok(NULL, "\n");
-    
-    if (token != NULL) {
-        return "ERR\n";
+    char* answer = (char*)malloc(sizeof(char)*((TOPIC_SIZE)*(nTopics)+8));
+    strcpy(answer, "ERR\n");
+
+    if (strlen(buffer) == 4) {
+        sprintf(answer, "LTR %d", nTopics);
+        for (int i = 0; i < nTopics; i++) {
+            strcat(answer, " "); strcat(answer, tList[i]);
+        }
+        strcat(answer, "\n");
     }
 
     free(buffer);
-    buffer = (char*)malloc(sizeof(char)*((TOPIC_SIZE)*(nTopics)+8));
+    return answer;
+}
 
-    sprintf(buffer, "LTR %d", nTopics);
-    for (int i = 0; i < nTopics; i++) {
-        strcat(buffer, " "); strcat(buffer, tList[i]);
-    }
-    strcat(buffer, "\n");
+char* ptp(char* buffer) {
+
+    char *id, *topic;
+    char* answer = (char*)malloc(sizeof(char)*9);
     
-    return buffer;
+    strcpy(answer, "PTR NOK\n");
+    strtok(buffer, " ");
+    id = strtok(NULL, " ");
+    topic = strtok(NULL, "\n");
+
+    if (nTopics == MAX_TOPICS) {
+        free(buffer);
+        strcpy(answer, "PTR FUL\n");
+        return answer;       
+    }
+
+    if (!checkUser(id) || topic == NULL || strlen(topic) > 10){
+        free(buffer);
+        return answer;
+    }
+
+    for (int i = 0; i < nTopics; i++) {
+        char current[TOPIC_SIZE];
+        strcpy(current, tList[i]);
+        if (!strcmp(strtok(current, ":"), topic)) {
+            strcpy(answer, "PTR DUP\n");
+            free(buffer);
+            return answer;
+        }
+        
+    }
+
+    tList[nTopics] = (char*) malloc(sizeof(char)*TOPIC_SIZE);
+    sprintf(tList[nTopics++], "%s:%s", topic, id);
+    strcpy(answer, "PTR OK\n");
+
+    free(buffer);
+    return answer;
 }
 
 char* handleMessage(char* buffer) {
 
+    char* message = (char*) malloc(sizeof(char)*(1+strlen(buffer)));
     char* token = NULL;
     int result = -1;
 
-    token = strtok(buffer, " \n"); 
+    strcpy(message, buffer);
+    token = strtok(message, " \n"); 
 
     if (token != NULL) {
         result = checkProtocol(token);
     }
+    free(message);
 
     switch (result) {
         case REG:
@@ -140,7 +198,7 @@ char* handleMessage(char* buffer) {
             break;
 
         case PTP:
-        //    return ptp(buffer);
+            return ptp(buffer);
             break;
 
         case LQU:
@@ -160,7 +218,10 @@ char* handleMessage(char* buffer) {
             break;
 
         default:
-            return "ERR\n";
+            free(buffer);
+            buffer = (char*) malloc(sizeof(char)*5);
+            strcpy(buffer, "ERR\n");
+            return buffer;
             break;
     }
 }
@@ -203,26 +264,18 @@ int main(int argc, char **argv) {
     if ((err = getaddrinfo(NULL, fsport, &hints, &resUDP)) != 0) error(2);
     if ((fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol)) == -1) error(2);
     if (bind(fdUDP, resUDP->ai_addr, resUDP->ai_addrlen) == -1) error(2);
-
-    nTopics = 3;
-    tList[0] = (char*)malloc(sizeof(char)*TOPIC_SIZE);
-    tList[1] = (char*)malloc(sizeof(char)*TOPIC_SIZE);
-    tList[2] = (char*)malloc(sizeof(char)*TOPIC_SIZE);
-    strcpy(tList[0], "TRABALHO:23455");
-    strcpy(tList[1], "PILA:99999");
-    strcpy(tList[2], "CONA:23233");
-    
-    while (1) { 
+    int i = 0;
+    while (i != 27) { 
         buffer = readMessageUDP(buffer, fdUDP, &addr, &addrlen);
         buffer = handleMessage(buffer);
         sendMessageUDP(buffer, fdUDP, addr, addrlen);
         free(buffer);
-        break;
+        i++;
     }
 
-    free(tList[0]);
-    free(tList[1]);
-    free(tList[2]);
+    for (int i = 0; i < nTopics; i++) {
+        free(tList[i]); 
+    }
     free(tList);
     freeaddrinfo(resUDP);
     close(fdUDP);
