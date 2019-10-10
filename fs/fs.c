@@ -10,8 +10,13 @@
 #include <netdb.h>
 
 #define PORT "58020"
+#define MAX_TOPICS 99
+#define TOPIC_SIZE 17
 
 enum options { REG, LTP, PTP, LQU, GQU, QUS, ANS };
+
+char** tList;
+int nTopics;
 
 void error(int error) {
 
@@ -33,7 +38,7 @@ void error(int error) {
     }
 }
 
-char* readMessageUDP(int fdUDP, char* buffer, struct sockaddr_in *addr, socklen_t *addrlen) {
+char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_t *addrlen) {
 
     int size = 1, data;
 
@@ -52,7 +57,7 @@ char* readMessageUDP(int fdUDP, char* buffer, struct sockaddr_in *addr, socklen_
     return buffer;
 }
 
-void sendMessageUDP(int fdUDP, char* buffer, struct sockaddr_in addr, socklen_t addrlen) {
+void sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen) {
 
     int n;
     printf("%s - %ld", buffer, strlen(buffer));
@@ -78,16 +83,40 @@ int checkProtocol(char* token) {
 char* reg(char* buffer) {
 
     char* token = strtok(NULL, "\n"); 
+    
+    free(buffer);
+    buffer = (char*)malloc(sizeof(char)*9);
 
+    strcpy(buffer, "RGR NOK\n");
     if (token != NULL && strlen(token) == 5) {
         for (int i = 0; i < 5; i++) {
             if (token[i] < '0' || token[i] > '9') {
-                return "RGR NOK\n";
+                return buffer;
             }
         }
-        return "RGR OK\n";
+        strcpy(buffer, "RGR OK\n");
     }
-    return "RGR NOK\n";
+    return buffer;
+}
+
+char* ltp(char* buffer) {
+
+    char* token = strtok(NULL, "\n");
+    
+    if (token != NULL) {
+        return "ERR\n";
+    }
+
+    free(buffer);
+    buffer = (char*)malloc(sizeof(char)*((TOPIC_SIZE)*(nTopics)+8));
+
+    sprintf(buffer, "LTR %d", nTopics);
+    for (int i = 0; i < nTopics; i++) {
+        strcat(buffer, " "); strcat(buffer, tList[i]);
+    }
+    strcat(buffer, "\n");
+    
+    return buffer;
 }
 
 char* handleMessage(char* buffer) {
@@ -107,11 +136,11 @@ char* handleMessage(char* buffer) {
             break;
 
         case LTP:
-        //    return ltp();
+            return ltp(buffer);
             break;
 
         case PTP:
-        //    return ptp();
+        //    return ptp(buffer);
             break;
 
         case LQU:
@@ -158,7 +187,12 @@ int main(int argc, char **argv) {
         }
     }
     printf("%d, %d\n", optind, argc);
+
     if (optind < argc) error(1);
+
+    //Initializing topic list
+    tList = (char**)malloc(sizeof(char*)*MAX_TOPICS);
+    nTopics = 0;
 
     //Initializing UDP socket
     memset(&hints, 0, sizeof hints);
@@ -170,55 +204,31 @@ int main(int argc, char **argv) {
     if ((fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol)) == -1) error(2);
     if (bind(fdUDP, resUDP->ai_addr, resUDP->ai_addrlen) == -1) error(2);
 
+    nTopics = 3;
+    tList[0] = (char*)malloc(sizeof(char)*TOPIC_SIZE);
+    tList[1] = (char*)malloc(sizeof(char)*TOPIC_SIZE);
+    tList[2] = (char*)malloc(sizeof(char)*TOPIC_SIZE);
+    strcpy(tList[0], "TRABALHO:23455");
+    strcpy(tList[1], "PILA:99999");
+    strcpy(tList[2], "CONA:23233");
+    
     while (1) { 
-        buffer = readMessageUDP(fdUDP, buffer, &addr, &addrlen);
-        sendMessageUDP(fdUDP, handleMessage(buffer), addr, addrlen);
+        buffer = readMessageUDP(buffer, fdUDP, &addr, &addrlen);
+        buffer = handleMessage(buffer);
+        sendMessageUDP(buffer, fdUDP, addr, addrlen);
         free(buffer);
         break;
     }
+
+    free(tList[0]);
+    free(tList[1]);
+    free(tList[2]);
+    free(tList);
     freeaddrinfo(resUDP);
     close(fdUDP);
     return 0;
 }
 
 /*
-int main(void)
-{
-struct addrinfo hints,*res;
-int fd,errcode;
-struct sockaddr_in addr;
-socklen_t addrlen;
-ssize_t n,nread;
-char buffer[128];
-memset(&hints,0,sizeof hints);
-hints.ai_family=AF_INET;//IPv4
-hints.ai_socktype=SOCK_DGRAM;//UDP socket
-hints.ai_flags=AI_PASSIVE|AI_NUMERICSERV;
-if((errcode=getaddrinfo(NULL,"58001",&hints,&res))!=0)/*errorexit(1);
-if((fd=socket(res->ai_family,res->ai_socktype,res->ai_protocol))==-1)/*errorexit(1);
-if(bind(fd,res->ai_addr,res->ai_addrlen)==-1)/*errorexit(1);
-while(1){addrlen=sizeof(addr);
-nread=recvfrom(fd,buffer,128,0,(struct sockaddr*)&addr,&addrlen);
-if(nread==-1)/*errorexit(1);
-n=sendto(fd,buffer,nread,0,(struct sockaddr*)&addr,addrlen);
-if(n==-1)/*errorexit(1);
-}
-//freeaddrinfo(res);
-//close(fd);
-//exit(0);*/
-
-
-/*    if (data > 0) {
-        buffer = (char*) malloc(sizeof(char)*data);
-        recvfrom(fdUDP, buffer, data, MSG_TRUNC, (struct sockaddr*)&addr, &addrlen);
-        printf("Message: %s", buffer);
-    }
-    else if ( data == 0) {
-        printf("The peer has performed an orderly shutdown.\n");
-        exit(1); // probs to change
-    }
-    else {
-        printf("An error has occurred.\n");
-        exit(1); //probs to change
-    }
+CHECKAR SE TERMINA COM UM \N NO CLIENTE
 */
