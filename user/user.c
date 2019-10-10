@@ -354,27 +354,30 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     return qList;
 }
 
-char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, int bufcount, char* ptr, char* topic, char* fileContent, char* folderPath, char* question) {
-    char *token, *extension, filename[MAXBUFFERSIZE], *an;
+char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, int* bufcount, char* ptr, char* topic, char* fileContent, char* question) {
+    char *token, *extension, filename[MAXBUFFERSIZE], *an, *contentPtr;
     int totalSize, numSize = 1;
     FILE* fp;
 
     token = strtok(NULL, " ");
-    printf("%s\n", token);
 
     if (isAnswer) {
         an = token;
         if (atoi(an) < 0 || atoi(an) > 10) error(2);
+        if (atoi(an) == 10) {
+            (*bufcount)++;
+        }
+        *bufcount += 2;
         ptr = readTCP(fdTCP, 6, ptr);
         *ptr = '\0';
         token = strtok((ptr - numSize), " ");
     }
     
     ptr = readTCP(fdTCP, 1, ptr);
-    bufcount++;
+    (*bufcount)++;
     while (*(ptr - 1) != ' ') {
         ptr = readTCP(fdTCP, 1, ptr);
-        bufcount++;
+        (*bufcount)++;
         numSize++;
     }
 
@@ -382,16 +385,8 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, int bufcoun
     token = strtok((ptr - numSize), " ");
 
     totalSize = atoi(token);
+    printf("%d\n", totalSize);
 
-    ptr = readTCP(fdTCP, totalSize + 1, ptr);
-    *ptr = '\0';
-
-    memset(fileContent, '\0', STANDARDBUFFERSIZE);
-    memcpy(fileContent, ptr - totalSize - 1, totalSize);
-
-    printf("%s\n", fileContent);
-/*
-    strcpy(filename, folderPath);
     strcpy(filename, topic); strcat(filename, "/");
     strcat(filename, question);
 
@@ -401,16 +396,50 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, int bufcoun
 
     fp = fopen(strcat(filename, ".txt"), "w");
 
-    fwrite(fileContent, 1, totalSize, fp);
+    memset(messageReceived, '\0', STANDARDBUFFERSIZE);
+    ptr = messageReceived;
+
+    while (totalSize >= STANDARDBUFFERSIZE) {
+        ptr = readTCP(fdTCP, STANDARDBUFFERSIZE - 1, ptr);
+        *ptr = '\0';
+        fwrite(messageReceived, 1, STANDARDBUFFERSIZE - 1, fp);
+        ptr = messageReceived;
+        totalSize -= (STANDARDBUFFERSIZE - 1);
+    }
+
+    ptr = readTCP(fdTCP, totalSize, ptr);
+    *ptr = '\0';
+    fwrite(messageReceived, 1, totalSize, fp);
 
     fclose(fp);
 
+    ptr = messageReceived;
+    ptr = readTCP(fdTCP, 7, ptr);
+    *bufcount = 7;
+    token = strtok(messageReceived, " ");
+    printf("%s\n", token);
+
+    if (!strcmp(token, "1")) {
+        memset(filename, '\0', STANDARDBUFFERSIZE);
+        extension = strtok(NULL, " ");
+        ptr += *bufcount;
+
+        numSize = 1;
+        ptr = readTCP(fdTCP, 1, ptr);
+        (*bufcount)++;
+        while (*(ptr - 1) != ' ') {
+            ptr = readTCP(fdTCP, 1, ptr);
+            (*bufcount)++;
+            numSize++;
+        }
+
+        *ptr = '\0';
+        token = strtok((ptr - numSize), " ");
+        printf("%s\n", token);
+    }
+
     // QGR qUserID qsize qdata qIMG [qiext qisize qidata] N (AN aUserID asize adata aIMG [aiext aisize aidata])*
-
-    token = strtok(ptr, " ");
-    *i += 2;
-    ptr += 2;
-
+/*
     if (!strcmp(token, "1")) {
         //image code, image not saving correctly
         extension = strtok(NULL, " ");
@@ -510,7 +539,7 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
 
     mkdir(topic, 0777);
 
-    ptr = questionGetAux(0, fdTCP, messageReceived, bufcount, ptr, topic, fileContent, folderPath, qList[questionSelected]);/*
+    ptr = questionGetAux(0, fdTCP, messageReceived, &bufcount, ptr, topic, fileContent, qList[questionSelected]);/*
     token2 = strtok(ptr, " ");
     
     // failsafe for current code where image doesn't work
