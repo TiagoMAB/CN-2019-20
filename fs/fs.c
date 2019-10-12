@@ -5,9 +5,11 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <dirent.h>
 
 #define PORT "58020"
 #define MAX_TOPICS 99
@@ -15,6 +17,7 @@
 
 enum options { REG, LTP, PTP, LQU, GQU, QUS, ANS };
 
+struct stat s = {0};
 char** tList;
 int nTopics;
 
@@ -38,6 +41,61 @@ void error(int error) {
     }
 }
 
+int loadTopics(char *dirname) { //TODO: CHECK IF ALL FOLDERS AND DIRECTORIES ARE CORRECT //CHAMADA SISTEMA?//CHAMADA SISTEMA?
+
+    DIR *d;
+    struct dirent *dir;
+
+    d = opendir(dirname);
+    if (d) {
+        readdir(d);
+        readdir(d);
+        while ((dir = readdir(d)) != NULL) {
+            if (dir->d_type == DT_DIR) {
+                char fName[37], topic[11], id[6];
+                FILE *f;
+
+                strcpy(topic, dir->d_name);
+                sprintf(fName, "topics/%s/%s_UID.txt", topic, topic);
+
+                f = fopen(fName, "r");              //CHAMADA SISTEMA?
+                
+                fgets(id, 6, f);
+                tList[nTopics] = (char*) malloc(sizeof(char)*TOPIC_SIZE);
+                sprintf(tList[nTopics++], "%s:%s", topic, id);
+
+                fclose(f);                          //CHAMADA SISTEMA?
+            }
+        }
+        closedir(d);                                //CHAMADA SISTEMA?
+        return 1;
+    }
+    else {
+        if (stat(dirname, &s) == -1) {              //CHAMADA SISTEMA?
+            mkdir(dirname, 0700);                   //CHAMADA SISTEMA?
+        }
+        return -1;
+    }
+}
+
+void createTopic(char* topic, char* id) {
+
+    char path[37] = "";
+    FILE *f;
+
+    sprintf(path, "topics/%s", topic);
+    mkdir(path, 0700);                          //FLAGS CORRETAS? //CHAMADA SISTEMA?
+
+    sprintf(path, "topics/%s/%s_UID.txt", topic, topic);
+    f = fopen(path, "w");                       //CHAMADA SISTEMA?
+    fwrite(id, 1, strlen(id), f);
+    fclose(f);                                  //CHAMADA SISTEMA?
+
+    tList[nTopics] = (char*) malloc(sizeof(char)*TOPIC_SIZE);
+    sprintf(tList[nTopics++], "%s:%s", topic, id);
+    
+}
+
 int checkUser(char* id) {
 
     if (id != NULL && strlen(id) == 5) {
@@ -49,6 +107,20 @@ int checkUser(char* id) {
         return 1;
     }
     return 0;
+}
+
+int checkTopic(char* topic) {
+
+    for (int i = 0; i < nTopics; i++) {
+        char current[TOPIC_SIZE];
+        strcpy(current, tList[i]);
+
+        if (!strcmp(strtok(current, ":"), topic)) {
+            return 1;
+        }
+    }
+    return 0;
+
 }
 
 char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_t *addrlen) {
@@ -155,26 +227,97 @@ char* ptp(char* buffer) {
         return answer;
     }
 
-    for (int i = 0; i < nTopics; i++) {
-        char current[TOPIC_SIZE];
-        strcpy(current, tList[i]);
-        if (!strcmp(strtok(current, ":"), topic)) {
-            strcpy(answer, "PTR DUP\n");
-            free(buffer);
-            return answer;
-        }
-        
+    if (checkTopic(topic)) {
+        strcpy(answer, "PTR DUP\n");
+        free(buffer);
+        return answer;
     }
 
-    tList[nTopics] = (char*) malloc(sizeof(char)*TOPIC_SIZE);
-    sprintf(tList[nTopics++], "%s:%s", topic, id);
+    createTopic(topic, id);
     strcpy(answer, "PTR OK\n");
 
     free(buffer);
     return answer;
 }
 
-char* handleMessage(char* buffer) {
+int dirSize(char* path) {   //VERIFICACOES
+
+    DIR *d;
+    struct dirent *dir;
+    int size = 0;
+
+    d = opendir(path);
+    if (d) {
+        readdir(d);
+        readdir(d);
+        while ((dir = readdir(d)) != NULL) {
+            if (dir->d_type == DT_DIR) {
+                size++;                     //CHAMADA SISTEMA?
+            }
+        }
+        closedir(d);                                //CHAMADA SISTEMA?
+        return size;
+    }
+    else {
+        return -1;
+    }
+}
+
+char* lqu(char *buffer) {
+
+    char* topic, path[30], *answer = (char*) malloc(sizeof(char)*(MAX_TOPICS*(TOPIC_SIZE+3)+8));
+    DIR *d;
+    struct dirent *dir;
+    int size;
+
+    strcpy(answer, "LQR");
+    strtok(buffer, " ");
+    topic = strtok(NULL, "\n");
+    
+    if (!checkTopic(topic)) {
+        answer = (char*) malloc(sizeof(char)*5);
+        strcpy(answer, "ERR\n");
+        return answer;
+    }
+    
+    sprintf(path, "topics/%s", topic);
+    size = dirSize(path);
+    if (!dirSize(path)) {
+        strcat(answer, " 0\n");
+        return answer;
+    }
+
+    sprintf(answer, "%s %d", answer, size);
+
+    d = opendir(path);
+    if (d) {
+        readdir(d);
+        readdir(d);
+        while ((dir = readdir(d)) != NULL) {
+            if (dir->d_type == DT_DIR) {
+                char fName[37], question[11], id[6];
+                FILE *f;
+
+                strcpy(question, dir->d_name);
+                sprintf(fName, "%s/%s/%s_UID.txt", path, question, question);
+
+                f = fopen(fName, "r");              //CHAMADA SISTEMA?
+                sprintf(fName, "%s/%s", path, question);
+
+                fgets(id, 6, f);
+                sprintf(answer, "%s %s:%s:%d", answer, question, id, dirSize(fName));
+
+                fclose(f);                          //CHAMADA SISTEMA?
+            }
+        }
+        closedir(d);                                //CHAMADA SISTEMA?
+    }
+    
+    strcat(answer, "\n");
+    return answer;    
+}
+
+char* handleMessage(char *buffer) {
 
     char* message = (char*) malloc(sizeof(char)*(1+strlen(buffer)));
     char* token = NULL;
@@ -202,7 +345,7 @@ char* handleMessage(char* buffer) {
             break;
 
         case LQU:
-        //    return lqu();
+            return lqu(buffer);
             break;
 
         case GQU:
@@ -247,13 +390,15 @@ int main(int argc, char **argv) {
             break;
         }
     }
-    printf("%d, %d\n", optind, argc);
 
     if (optind < argc) error(1);
 
     //Initializing topic list
     tList = (char**)malloc(sizeof(char*)*MAX_TOPICS);
     nTopics = 0;
+
+    //Loading existing files
+    loadTopics("topics");
 
     //Initializing UDP socket
     memset(&hints, 0, sizeof hints);
@@ -264,6 +409,7 @@ int main(int argc, char **argv) {
     if ((err = getaddrinfo(NULL, fsport, &hints, &resUDP)) != 0) error(2);
     if ((fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol)) == -1) error(2);
     if (bind(fdUDP, resUDP->ai_addr, resUDP->ai_addrlen) == -1) error(2);
+    
     int i = 0;
     while (i != 27) { 
         buffer = readMessageUDP(buffer, fdUDP, &addr, &addrlen);
