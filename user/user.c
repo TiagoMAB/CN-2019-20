@@ -67,6 +67,17 @@ char* readTCP(int fdTCP, size_t nLeft, char* ptr) {
     return ptr;
 }
 
+char* writeTCP(int fdTCP, size_t nLeft, char* ptr) {
+    size_t nWritten = 0;
+    while (nLeft > 0) {
+        nWritten = write(fdTCP, ptr, nLeft);
+        if (nWritten <= 0) error(2);
+        nLeft -= nWritten;
+        ptr += nWritten;
+    }
+    return ptr;
+}
+
 int command_strcmp(char *token) {
 
     char *opts[] = {"register", "reg", "topic_list", "tl", "topic_propose", 
@@ -353,8 +364,8 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     return qList;
 }
 
-char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, char* topic, char* fileContent, char* question) {
-    char *token, *extension, fileName[STANDARDBUFFERSIZE], filePath[STANDARDBUFFERSIZE], an[2], *contentPtr;
+char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, char* topic, char* question) {
+    char *token, *extension, fileName[STANDARDBUFFERSIZE], filePath[STANDARDBUFFERSIZE], an[2];
     int totalSize, numSize = 1;
     FILE* fp;
 
@@ -471,10 +482,9 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
 
 void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQuestions, char** qList) {
 
-    int n = 0, i, bufcount = 0, questionSelected, totalSize, numSize, nAnswers;
-    ssize_t nBytes, nLeft, nWritten, nRead;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[STANDARDBUFFERSIZE] = "", messageSave[STANDARDBUFFERSIZE], *token2, *qiext, *ptr = messageSent, *ptr2, 
-         folderPath[MESSAGE_SIZE] = "", fileContent[STANDARDBUFFERSIZE];
+    int n, i, questionSelected, numSize, nAnswers;
+    ssize_t nBytes, nLeft, nWritten;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[STANDARDBUFFERSIZE] = "", *token2, *ptr = messageSent;
     FILE *fp;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
@@ -516,13 +526,9 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQues
     if (n == -1) error(2);
 
     nBytes = strlen(messageSent);
-    nLeft = nBytes;
-    while (nLeft > 0) {
-        nWritten = write(fdTCP, messageSent, nLeft);
-        if (nWritten <= 0) error(2);
-        nLeft -= nWritten;
-        ptr += nWritten;
-    }
+    ptr = messageSent;
+
+    writeTCP(fdTCP, nBytes, ptr);
 
     ptr = messageReceived;
     ptr = readTCP(fdTCP, 10, ptr);
@@ -536,15 +542,12 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQues
         printf("Request formulated incorrectly\n");
         return;
     }
-
-    memset(messageSave, '\0', STANDARDBUFFERSIZE);
-    strcpy(messageSave, messageReceived);
     
     token2 = strtok(messageReceived, " ");
 
     mkdir(topic, 0777);
 
-    ptr = questionGetAux(0, fdTCP, messageReceived, ptr, topic, fileContent, qList[questionSelected]);
+    ptr = questionGetAux(0, fdTCP, messageReceived, ptr, topic, qList[questionSelected]);
     
     ptr = readTCP(fdTCP, 2, ptr);
     numSize = 1;
@@ -564,10 +567,16 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQues
     nAnswers = atoi(token);
     
     while (nAnswers) {
-        ptr = questionGetAux(1, fdTCP, messageReceived, ptr, topic, fileContent, qList[questionSelected]);
+        ptr = questionGetAux(1, fdTCP, messageReceived, ptr, topic, qList[questionSelected]);
         readTCP(fdTCP, 1, ptr);
         nAnswers -= 1;
     }
+}
+
+void question_submit(int fdTCP, char* token, char* topic) {
+    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr = messageSent;
+    FILE *fp;
+    int n, i;
 }
 
 int main(int argc, char **argv) {
@@ -730,6 +739,23 @@ int main(int argc, char **argv) {
                 break;
 
             case QUESTION_SUBMIT:
+                if (sTopic == -1) {
+                    printf("ERR: Missing information. No topic has been selected\n");
+                }
+                else {
+                    hints.ai_socktype = SOCK_STREAM;
+
+                    s = getaddrinfo(fsip, fsport, &hints, &resTCP);
+                    if (s != 0) error(2);
+
+                    fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
+                    if (fdTCP == -1) error(2);
+
+                    question_submit(fdTCP, token, tList[sTopic]);
+
+                    freeaddrinfo(resTCP);
+                    close(fdTCP);
+                }
                 break;
             case QUESTION_ANSWER:
                 break;
