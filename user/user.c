@@ -469,7 +469,7 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
     return ptr;
 }
 
-void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qList) {
+void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQuestions, char** qList) {
 
     int n = 0, i, bufcount = 0, questionSelected, totalSize, numSize, nAnswers;
     ssize_t nBytes, nLeft, nWritten, nRead;
@@ -486,21 +486,31 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
         return;
     }
 
-    for (i = 0; i < nQuestions; i++) {
-        token2 = strtok(qList[i], ":");
-        if (!strcmp(token, token2)) {
-            printf("Question selected: %d %s\n", i + 1, token2);
-            questionSelected = i;
-            break;
+    if (!commandType) {
+        for (i = 0; i < nQuestions; i++) {
+            token2 = strtok(qList[i], ":");
+            if (!strcmp(token, token2)) {
+                printf("Question selected: %d %s\n", i + 1, token2);
+                questionSelected = i;
+                break;
+            }
+        }
+
+        if (i == nQuestions) {
+            printf("ERR: Invalid question selected\n");
+            return;
         }
     }
-
-    if (i == nQuestions) {
+    else if (atoi(token) > 0 && atoi(token) <= nQuestions) {
+        questionSelected = atoi(token) - 1;
+        token2 = strtok(qList[questionSelected], ":");
+    }
+    else {
         printf("ERR: Invalid question selected\n");
         return;
     }
 
-    strcat(messageSent, "GQU "); strcat(messageSent, topic); strcat(messageSent, " "); strcat(messageSent, token); strcat(messageSent, "\n");
+    strcat(messageSent, "GQU "); strcat(messageSent, topic); strcat(messageSent, " "); strcat(messageSent, token2); strcat(messageSent, "\n");
 
     n = connect(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
     if (n == -1) error(2);
@@ -540,7 +550,6 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     numSize = 1;
 
     while (*(ptr - 1) != ' ' && *(ptr - 1) != '\n') {
-        printf("banana\n");
         ptr = readTCP(fdTCP, 1, ptr);
         numSize++;
     }
@@ -553,7 +562,6 @@ void questionGet(int fdTCP, char* token, char* topic, int nQuestions, char** qLi
     token = strtok((ptr - numSize), " ");
 
     nAnswers = atoi(token);
-    printf("%d\n", nAnswers);
     
     while (nAnswers) {
         ptr = questionGetAux(1, fdTCP, messageReceived, ptr, topic, fileContent, qList[questionSelected]);
@@ -694,6 +702,7 @@ int main(int argc, char **argv) {
                 break;
 
             case QUESTION_GET:
+            case QG:
                 if (sTopic == -1) {
                     printf("ERR: Missing information. No topic has been selected\n");
                 }
@@ -708,15 +717,18 @@ int main(int argc, char **argv) {
 
                     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
                     if (fdTCP == -1) error(2);
-                    questionGet(fdTCP, token, tList[sTopic], nQuestions, qList);
+
+                    if (result == QUESTION_GET)
+                        questionGet(0, fdTCP, token, tList[sTopic], nQuestions, qList);
+                    else
+                        questionGet(1, fdTCP, token, tList[sTopic], nQuestions, qList);
+
                     freeaddrinfo(resTCP);
                     close(fdTCP);
                 }
 
                 break;
 
-            case QG:
-                break;
             case QUESTION_SUBMIT:
                 break;
             case QUESTION_ANSWER:
