@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -15,6 +16,8 @@
 #define PORT "58020"
 #define MAX_TOPICS 99
 #define TOPIC_SIZE 17
+
+#define max(A, B) (A >= B ? A : B)
 
 enum options { REG, LTP, PTP, LQU, GQU, QUS, ANS };
 
@@ -345,12 +348,13 @@ char* handleMessage(char *buffer) {
 
 int main(int argc, char **argv) {
 
-    int option, p = 0, fdUDP, fdTCP, err;
+    int option, p = 0, fdUDP, fdTCP, fdMax, err;
     char *fsport = PORT, *buffer;
     struct addrinfo hints, *resUDP, *resTCP;
     struct sockaddr_in addr;
     socklen_t addrlen;
     ssize_t n, nread;
+    fd_set rfds;
     
     while ((option = getopt (argc, argv, "p:")) != -1) {
         switch (option)
@@ -384,17 +388,48 @@ int main(int argc, char **argv) {
     if ((fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol)) == -1) error(2);
     if (bind(fdUDP, resUDP->ai_addr, resUDP->ai_addrlen) == -1) error(2);
     
+    //Initializing TCP socket
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE|AI_NUMERICSERV;
+
+    if ((err = getaddrinfo(NULL, fsport, &hints, &resTCP)) != 0) error(2);
+    if ((fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol)) == -1) error(2);
+    if (bind(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen) == -1) error(2);
+    if (listen(fdTCP, 5) == -1) error(2);
+
     int i = 0;
     while (i != 10) { 
-        buffer = readMessageUDP(buffer, fdUDP, &addr, &addrlen);
-        buffer = handleMessage(buffer);
-        sendMessageUDP(buffer, fdUDP, addr, addrlen);
-        free(buffer);
+        /*Mask initialization*/
+        FD_ZERO(&rfds);
+        FD_SET(fdUDP, &rfds);
+        FD_SET(fdTCP, &rfds);
+        fdMax = max(fdUDP, fdTCP);
+
+        /*Waits for commands*/
+        err = select(fdMax+1, &rfds, (fd_set*) NULL, (fd_set*) NULL, (struct timeval *)NULL);
+        if (err <= 0) { error(2); }
+
+        /*Reads input from an UDP connection*/
+        if (FD_ISSET(fdUDP, &rfds)) {
+            buffer = readMessageUDP(buffer, fdUDP, &addr, &addrlen);
+            buffer = handleMessage(buffer);
+            sendMessageUDP(buffer, fdUDP, addr, addrlen);
+            free(buffer);
+        }
+
+        /*Reads input from an TCP connection*/
+        if (FD_ISSET(fdTCP, &rfds)) {
+
+        }
         i++;
     }
 
     freeaddrinfo(resUDP);
+    freeaddrinfo(resTCP);
     close(fdUDP);
+    close(fdTCP);
     return 0;
 }
 
