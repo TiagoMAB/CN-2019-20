@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <string.h>
-#define PORT "58000"
+#define PORT "58020"
 
 int main() {
 	int fd;
@@ -21,7 +21,7 @@ int main() {
 	hints.ai_socktype = SOCK_STREAM;	//TCP socket
 	hints.ai_flags = AI_NUMERICSERV;
 
-	n = getaddrinfo("daniel-VirtualBox", PORT, &hints, &res);
+	n = getaddrinfo("localhost", PORT, &hints, &res);
 	if (n != 0) /*error*/ exit(1);
 
 	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
@@ -30,7 +30,7 @@ int main() {
 	n = connect(fd, res->ai_addr, res->ai_addrlen);
 	if (n == -1) /*error*/ exit(1);
 
-	n = write(fd, "Hello!\n", 7);
+	n = write(fd, "C\n", 7);
 	if (n == -1) /*error*/ exit(1);
 
 	n = read(fd, buffer, 128);

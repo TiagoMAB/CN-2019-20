@@ -52,10 +52,8 @@ int dirSize(char* path) {   //VERIFICACOES
 
     d = opendir(path);
     if (d) {
-        readdir(d);
-        readdir(d);
         while ((dir = readdir(d)) != NULL) {
-            if (dir->d_type == DT_DIR) {
+            if ((dir->d_type == DT_DIR) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
                 size++;                     //CHAMADA SISTEMA?
             }
         }
@@ -74,10 +72,8 @@ char* getDirContent(char* path, char* answer, int flag) {
 
     d = opendir(path);
     if (d) {
-        readdir(d);
-        readdir(d);
         while ((dir = readdir(d)) != NULL) {
-            if (dir->d_type == DT_DIR) {
+            if ((dir->d_type == DT_DIR) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
                 char fName[37], subDir[11], id[6];
                 FILE *f;
 
@@ -132,12 +128,13 @@ int checkUser(char* id) {
     return 0;
 }
 
-int checkTopic(char* topic) {
+int checkDir(char* topic) {
 
     DIR *d;
     char path[18] = "";
 
     sprintf(path, "topics/%s", topic);
+    printf("STDERR: CHECKING PATH: %s\n", path);
 
     d = opendir(path);
     if (d) { 
@@ -147,6 +144,19 @@ int checkTopic(char* topic) {
     else if (ENOENT == errno) { return 0;}
     else { error(1); } //CHECK
 
+}
+
+int verifyTopic(char* topic) {
+
+    if (topic != NULL && strlen(topic) <= 10) {
+        for (int i = 0; i < strlen(topic); i++) {
+            if ((topic[i] < '0' || topic[i] > '9') && (topic[i] < 'A' || topic[i] > 'Z') && (topic[i] < 'a' || topic[i] > 'z')) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+    return 1; 
 }
 
 char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_t *addrlen) {
@@ -183,6 +193,41 @@ void sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t 
     n = sendto(fdUDP, buffer, strlen(buffer), 0, (struct sockaddr*)&addr, addrlen);
     if (n == -1) error(2);
     printf("STDERR: Size: %ld | MESSAGE SENT: %s", strlen(buffer), buffer);
+}
+
+char* readMessageTCP(char* buffer, int nBytes, int fdTCP, struct sockaddr_in *addr, socklen_t *addrlen) {
+
+    int readBytes = 0;
+    char* message = (char*) malloc(sizeof(char)*(nBytes+1));
+
+    buffer = (char*) malloc(sizeof(char)*(nBytes+1));
+    memset(buffer, '\0', nBytes);
+
+    while (readBytes < nBytes) {
+        readBytes += read(fdTCP, message, nBytes);
+        message[readBytes] = '\0';
+        printf("%d|", readBytes);
+        strcat(buffer, message);
+        if (buffer[readBytes-1] = '\n') {
+            break;
+        }
+    }
+
+    strcpy(buffer, message);
+    free(message);
+
+    printf("\nSTDERR: | Size: %ld | data: %d | MESSAGE RECEIVED TCP: %s", strlen(buffer), readBytes, buffer);
+    return buffer;
+}
+
+void sendMessageTCP(char* buffer, int size, int fdTCP) {
+
+    int n;
+
+    printf("STDERR: Size: %d | MESSAGE to ben sent TCP: %s\n", size, buffer);
+    n = write(fdTCP, buffer, size);
+    if (n == -1) error(2);
+    printf("STDERR: Size: %d | MESSAGE SENT TCP: %s\n", size, buffer);
 }
 
 int checkProtocol(char* token) {
@@ -246,12 +291,12 @@ char* ptp(char* buffer) {
         return answer;       
     }
 
-    if (!checkUser(id) || topic == NULL || strlen(topic) > 10){
+    if (!checkUser(id) || verifyTopic(topic)){
         free(buffer);
         return answer;
     }
 
-    if (checkTopic(topic)) {
+    if (checkDir(topic)) {
         strcpy(answer, "PTR DUP\n");
         free(buffer);
         return answer;
@@ -273,7 +318,7 @@ char* lqu(char *buffer) {
     strtok(buffer, " ");
     topic = strtok(NULL, "\n");
     
-    if (!checkTopic(topic)) {
+    if (!checkDir(topic)) {
         free(buffer);
         strcpy(answer, "ERR\n");
         return answer;
@@ -294,7 +339,171 @@ char* lqu(char *buffer) {
     return answer;    
 }
 
-char* handleMessage(char *buffer) {
+int readAndSendFile(char* path, char* mode, int fd) {
+
+    FILE *f;
+    int size = 0;
+    char *buffer, fileSize[12]; 
+
+    f = fopen(path, mode);
+
+    fseek(f, 0 , SEEK_END);
+    size = ftell(f);
+    fseek(f, 0 , SEEK_SET);
+
+    if (!strcmp(mode, "rb")) {
+        sprintf(fileSize, " %d ", size);
+        sendMessageTCP(fileSize, strlen(fileSize), fd);
+    } 
+
+    buffer = (char*) malloc(sizeof(char)*(size+1)); 
+    if (fread(buffer, size, 1, f) == -1) error(2); //check error
+    buffer[size] = '\0';
+    
+    fclose(f);
+
+    sendMessageTCP(buffer, size, fd);
+    free(buffer);
+
+    return 0;
+}
+
+void handleFolder(char* path, char* dirName, int fd) {
+
+    DIR *d;
+    struct dirent *dir;
+    int size, qIMG = 0, ansSize = 270, nBytes = 0;
+    long fileSize = 0;
+    char pathUID[100], pathTitle[100], ext[100], pathIMG[1000], buffer[256] = "", *answer = (char*) malloc(sizeof(char)*ansSize), *buffer2;
+
+    sprintf(pathUID, "topics/%s/%s_UID.txt", path, dirName);
+    sprintf(pathTitle, "topics/%s/%s.txt", path, dirName);
+    printf("STDERR: Question INFO: pathUID: %s | pathTitle: %s | path: %s\n", pathUID, pathTitle, path);
+
+    readAndSendFile(pathUID, "r", fd);
+    readAndSendFile(pathTitle, "rb", fd);
+
+    char att[233];
+    sprintf(att, "topics/%s", path);
+
+    d = opendir(att);
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            char uid[200], title[200];
+            sprintf(uid, "%s_UID.txt", dirName);
+            sprintf(title, "%s.txt", dirName);
+            printf("\n : %s\n", uid);
+            printf("\n : %s\n", title);
+                
+            if ((dir->d_type != DT_DIR) && strcmp(dir->d_name, uid) && strcmp(dir->d_name, title)) {
+                char d_name[256], *token;
+                strcpy(d_name, dir->d_name);
+                token = strtok(d_name, ".");
+                token = strtok(NULL, "");
+                strcpy(ext, token);
+                qIMG = 1;
+                sprintf(pathIMG, "topics/%s/%s", path, dir->d_name);
+                printf("STDERR: topics/%s/%s\n", path, dir->d_name);
+                
+            }
+        }
+        closedir(d);                                //CHAMADA SISTEMA?
+    }
+    else {
+
+    }
+
+    if (qIMG) { 
+        sendMessageTCP(" 1 ", 3, fd);
+        sendMessageTCP(ext, strlen(ext), fd);
+        readAndSendFile(pathIMG, "rb", fd);    
+    }
+    else {
+        sendMessageTCP(" 0", 2, fd);
+    }
+
+}
+char* dirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+
+    DIR *d;
+    struct dirent *dir;
+    int size, qIMG = 0, ansSize = 270, nBytes = 0;
+    long fileSize = 0;
+    char pathUID[100], pathTitle[100], pathIMG[1000], buffer[256] = "", *answer = (char*) malloc(sizeof(char)*ansSize), *buffer2;
+    FILE *f;
+
+    sendMessageTCP("QGR ", 4, fd);
+
+    handleFolder(path, dirName, fd);
+    
+    char att[233];
+    sprintf(att, "topics/%s", path);
+    size = dirSize(att);
+    if (size >= 10) {
+        sendMessageTCP(" 10 ", 4, fd);
+    }
+    else if (size == 0) {
+        sendMessageTCP(" 0\n", 3, fd);
+    }
+    else {
+        sprintf(answer, " %d ", size);
+        sendMessageTCP(answer, strlen(answer), fd);
+    }
+
+    for (int i = 10; i > 0 && size > 0; i--) {
+        char pathAnswer[1000] = "", AN[4] = "", d_name[300] = "";
+        sprintf(d_name, "%s_%02d", dirName, size);
+        sprintf(pathAnswer, "%s/%s_%02d", path, dirName, size);
+        sprintf(AN, "%02d ", size);
+        sendMessageTCP(AN, strlen(AN), fd);
+        printf("STDERR: pathanswer: %s\n", pathAnswer);
+        handleFolder(pathAnswer, d_name, fd);
+        size--;
+        if (size && i) {
+            sendMessageTCP(" ", 1, fd);
+        }
+        else {
+            sendMessageTCP("\n", 1, fd);
+        }
+    }
+}
+
+char* gqu(char *buffer, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+
+    char *topic, *question, *answer;
+
+    free(buffer);
+    buffer = readMessageTCP(buffer, 23, fd, addr, addrlen);
+
+    topic = strtok(buffer, " ");
+    question = strtok(NULL, "\n");
+
+    printf("STDERR: GQU: %s | %s \n", topic, question);
+
+    if (verifyTopic(topic) || verifyTopic(question)) {
+        char* answer = (char*) malloc(sizeof(char)*9);
+        strcpy(answer, "QGR ERR\n");
+        free(buffer);
+        return answer;
+    }
+
+    char path[30];
+    sprintf(path, "%s/%s", topic, question);
+
+
+    if (!checkDir(topic) || !checkDir(path)) {
+        char* answer = (char*) malloc(sizeof(char)*9);
+        strcpy(answer, "QGR EOF\n");
+        return answer;
+    }
+
+    answer = dirInfo(path, question, fd, addr, addrlen);
+    free(buffer);
+    return answer;
+
+}
+
+char* handleMessage(char *buffer, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
     char* message = (char*) malloc(sizeof(char)*(1+strlen(buffer)));
     char* token = NULL;
@@ -326,7 +535,7 @@ char* handleMessage(char *buffer) {
             break;
 
         case GQU:
-        //    return gqu();
+            return gqu(buffer, fd, addr, addrlen);
             break;
 
         case QUS:
@@ -414,15 +623,21 @@ int main(int argc, char **argv) {
         /*Reads input from an UDP connection*/
         if (FD_ISSET(fdUDP, &rfds)) {
             buffer = readMessageUDP(buffer, fdUDP, &addr, &addrlen);
-            buffer = handleMessage(buffer);
+            buffer = handleMessage(buffer, fdUDP, &addr, &addrlen);
             sendMessageUDP(buffer, fdUDP, addr, addrlen);
             free(buffer);
         }
 
         /*Reads input from an TCP connection*/
         if (FD_ISSET(fdTCP, &rfds)) {
-
+            int fdNew;
+            addrlen = sizeof(addr);
+            if ((fdNew = accept(fdTCP, (struct sockaddr*)&addr, &addrlen)) == -1) error(2); //check error code
+            buffer = readMessageTCP(buffer, 3, fdNew, &addr, &addrlen);
+            handleMessage(buffer, fdNew, &addr, &addrlen);
+            close(fdNew);
         }
+
         i++;
     }
 
