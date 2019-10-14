@@ -71,7 +71,7 @@ char* writeTCP(int fdTCP, size_t nLeft, char* ptr) {
     size_t nWritten = 0;
     while (nLeft > 0) {
         nWritten = write(fdTCP, ptr, nLeft);
-        if (nWritten <= 0) error(2);
+        if (nWritten == -1) error(2);
         nLeft -= nWritten;
         ptr += nWritten;
     }
@@ -457,16 +457,11 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
         while (totalSize > 0) {
             if (totalSize > STANDARDBUFFERSIZE) {
                 readTCP(fdTCP, STANDARDBUFFERSIZE, ptr);
-                ptr = messageReceived;
                 fwrite(ptr, 1, STANDARDBUFFERSIZE, fp);
-                ptr = messageReceived;
             }
             else {
-                memset(fileName, '\0', STANDARDBUFFERSIZE);
                 readTCP(fdTCP, totalSize, ptr);
-                ptr = messageReceived;
                 fwrite(ptr, 1, totalSize, fp);
-                ptr = messageReceived;
             }
             totalSize -= STANDARDBUFFERSIZE;
         }
@@ -573,10 +568,101 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQues
     }
 }
 
-void question_submit(int fdTCP, char* token, char* topic) {
-    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr = messageSent;
+void question_submit(int fdTCP, char* token, char* topic, char* userID) {
+    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr = messageSent, *token2, totalSizeStr[10], textFileName[MESSAGE_SIZE];
     FILE *fp;
-    int n, i;
+    struct stat st;
+    int n, i, totalSize, nRead;
+
+    memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageReceived, '\0', STANDARDBUFFERSIZE);
+
+    token2 = strtok(token, " ");
+    if (token2 == NULL) {
+        printf("Bad command\n");
+        return;
+    }
+
+    strcat(messageSent, "QUS "); strcat(messageSent, userID); strcat(messageSent, " "); strcat(messageSent, topic); strcat(messageSent, " "); strcat(messageSent, token2);
+
+    token2 = strtok(NULL, " \n");
+    if (token2 == NULL) {
+        printf("Bad command\n");
+        return;
+    }
+
+    strcpy(textFileName, token2);
+    strcat(textFileName, ".txt");
+
+    n = stat(textFileName, &st);
+    if (n) {
+        printf("One or more selected files unavailable\n");
+        return;
+    }
+    
+    totalSize = st.st_size;
+    sprintf(totalSizeStr, "%d", totalSize);
+
+    strcat(messageSent, " "); strcat(messageSent, totalSizeStr); strcat(messageSent, " ");
+    ptr = messageSent;
+
+    n = connect(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
+    if (n == -1) error(2);
+    printf("%s\n", ptr);
+    
+    writeTCP(fdTCP, strlen(messageSent), ptr);
+
+    memset(messageSent, '\0', MESSAGE_SIZE);
+
+    fp = fopen(textFileName, "r");
+
+    while (totalSize >= STANDARDBUFFERSIZE) {
+        nRead = fread(messageSent, 1, STANDARDBUFFERSIZE, fp);
+
+        if (nRead < STANDARDBUFFERSIZE) {
+            *(ptr + nRead) = '\0';
+        }
+
+        printf("\n%s\n", ptr);
+        writeTCP(fdTCP, nRead, ptr);
+        totalSize -= (nRead);
+    }
+
+    ptr += fread(messageSent, 1, totalSize, fp);
+    *ptr = '\0';
+    ptr = messageSent;
+    printf("\n%s\n", ptr);
+    writeTCP(fdTCP, totalSize, ptr);
+
+    token2 = strtok(NULL, " \n");
+    if (token2 == NULL) {
+        writeTCP(fdTCP, 3, " 0\n");
+        printf("asd\n");
+    }
+    else
+        printf("\n%s\n", token2);
+
+    ptr = messageReceived;
+    readTCP(fdTCP, 8, ptr);
+
+    if (!strcmp(messageReceived, "QUR DUP\n")) {
+        printf("Question already exists\n");
+        return;
+    }
+
+    if (!strcmp(messageReceived, "QUR FUL\n")) {
+        printf("Question list is full\n");
+        return;
+    }
+    if (!strcmp(messageReceived, "QUR NOK\n")) {
+        printf("Unknown error\n");
+        return;
+    }
+    
+    printf("%s\n", messageReceived);
+
+    fclose(fp);
+    printf("finish\n");
 }
 
 int main(int argc, char **argv) {
@@ -739,7 +825,10 @@ int main(int argc, char **argv) {
                 break;
 
             case QUESTION_SUBMIT:
-                if (sTopic == -1) {
+                if (strlen(userID) != 5) {
+                    printf("There is no user registered\n");
+                }
+                else if (sTopic == -1) {
                     printf("ERR: Missing information. No topic has been selected\n");
                 }
                 else {
@@ -751,12 +840,15 @@ int main(int argc, char **argv) {
                     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
                     if (fdTCP == -1) error(2);
 
-                    question_submit(fdTCP, token, tList[sTopic]);
+                    token = strtok(NULL, "\n");
+
+                    question_submit(fdTCP, token, tList[sTopic], userID);
 
                     freeaddrinfo(resTCP);
                     close(fdTCP);
                 }
                 break;
+
             case QUESTION_ANSWER:
                 break;
             case EXIT:
