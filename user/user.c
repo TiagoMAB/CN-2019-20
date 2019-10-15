@@ -70,11 +70,8 @@ char* readTCP(int fdTCP, size_t nLeft, char* ptr) {
 char* writeTCP(int fdTCP, size_t nLeft, char* ptr) {
     size_t nWritten = 0;
     while (nLeft > 0) {
-        printf("morango\n%s\nmorango\n", ptr);
         nWritten = write(fdTCP, ptr, nLeft);
-        printf("melancia\n");
         if (nWritten == -1) error(2);
-        printf("melao\n");
         nLeft -= nWritten;
         ptr += nWritten;
     }
@@ -572,8 +569,7 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQues
 }
 
 void question_submit(int fdTCP, char* token, char* topic, char* userID) {
-    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr = messageSent, *token2, totalSizeStr[10], textFileName[MESSAGE_SIZE],
-    *questionText;
+    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr = messageSent, *token2, totalSizeStr[10], textFileName[MESSAGE_SIZE], extension[4];
     FILE *fp;
     struct stat st;
     int n, i, totalSize, nRead;
@@ -581,7 +577,7 @@ void question_submit(int fdTCP, char* token, char* topic, char* userID) {
     memset(messageSent, '\0', MESSAGE_SIZE);
     memset(messageReceived, '\0', STANDARDBUFFERSIZE);
 
-    token2 = strtok(token, " \n");
+    token2 = strtok(token, " ");
     if (token2 == NULL) {
         printf("Bad command\n");
         return;
@@ -612,39 +608,76 @@ void question_submit(int fdTCP, char* token, char* topic, char* userID) {
 
     n = connect(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
     if (n == -1) error(2);
-    printf("%s\n", ptr);
     
     writeTCP(fdTCP, strlen(messageSent), ptr);
 
-    memset(messageSent, '\0', MESSAGE_SIZE);
+    memset(messageSent, '\0', STANDARDBUFFERSIZE);
 
     fp = fopen(textFileName, "r");
 
-    questionText = (char*) malloc(sizeof(char) * (totalSize + 3));
-    fread(questionText, 1, totalSize, fp);
+    while (totalSize >= STANDARDBUFFERSIZE) {
+        nRead = fread(messageSent, 1, STANDARDBUFFERSIZE, fp);
+        writeTCP(fdTCP, nRead, ptr);
+        totalSize -= (nRead);
+    }
+
+    ptr += fread(messageSent, 1, totalSize, fp);
+    *ptr = '\0';
+    ptr = messageSent;
+    writeTCP(fdTCP, totalSize, ptr);
+
     fclose(fp);
-    
+
     token2 = strtok(NULL, " \n");
     if (token2 == NULL) {
-        strcat(questionText, " 0\n");
-        printf("asd\n");
+        writeTCP(fdTCP, 3, " 0\n");
     }
     else {
-        strcat(questionText, " 1\n");
-        printf("\n%s\n", token2);
+        n = stat(token2, &st);
+        if (n) {
+            printf("One or more selected files unavailable\n");
+            return;
+        }
+
+        writeTCP(fdTCP, 3, " 1 ");
+
+        totalSize = strlen(token2);
+
+        memcpy(extension, &token2[totalSize - 3], 3);
+
+        extension[3] = '\0';
+        memset(messageSent, '\0', STANDARDBUFFERSIZE);
+        strcat(messageSent, extension); strcat(messageSent, " ");
+
+        totalSize = st.st_size;
+        sprintf(totalSizeStr, "%d", totalSize);
+
+        strcat(messageSent, totalSizeStr); strcat(messageSent, " ");
+        ptr = messageSent;
+        writeTCP(fdTCP, strlen(messageSent), ptr);
+
+        memset(messageSent, '\0', STANDARDBUFFERSIZE);
+
+        fp = fopen(token2, "rb");
+
+        while (totalSize > 0) {
+            if (totalSize > STANDARDBUFFERSIZE) {
+                fread(ptr, 1, STANDARDBUFFERSIZE, fp);
+                writeTCP(fdTCP, STANDARDBUFFERSIZE, ptr);
+            }
+            else {
+                fread(ptr, 1, totalSize, fp);
+                writeTCP(fdTCP, totalSize, ptr);
+            }
+            totalSize -= STANDARDBUFFERSIZE;
+        }
+
+        fclose(fp);
+        writeTCP(fdTCP, 1, "\n");
     }
-
-    printf("\n\n%s\n\n", questionText);
-    writeTCP(fdTCP, totalSize + 3, questionText);
-
-    printf("what happened\n");
 
     ptr = messageReceived;
     readTCP(fdTCP, 8, ptr);
-
-    printf("nothing\n");
-
-    free(questionText);
 
     if (!strcmp(messageReceived, "QUR DUP\n")) {
         printf("Question already exists\n");
@@ -659,10 +692,12 @@ void question_submit(int fdTCP, char* token, char* topic, char* userID) {
         printf("Unknown error\n");
         return;
     }
+    if (!strcmp(messageReceived, "QUR OK\n")) {
+        printf("Success\n");
+        return;
+    }
     
-    printf("%s\n", messageReceived);
-    printf("finish\n");
-
+    error(2);
 }
 
 int main(int argc, char **argv) {
