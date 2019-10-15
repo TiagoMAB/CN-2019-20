@@ -632,6 +632,10 @@ void question_submit(int fdTCP, char* token, char* topic, char* userID) {
     if (token2 == NULL) {
         writeTCP(fdTCP, 3, " 0\n");
     }
+    else if (strtok(NULL, " ") != NULL) {
+        printf("Bad command\n");
+        return;
+    }
     else {
         n = stat(token2, &st);
         if (n) {
