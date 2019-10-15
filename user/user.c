@@ -70,8 +70,11 @@ char* readTCP(int fdTCP, size_t nLeft, char* ptr) {
 char* writeTCP(int fdTCP, size_t nLeft, char* ptr) {
     size_t nWritten = 0;
     while (nLeft > 0) {
+        printf("morango\n%s\nmorango\n", ptr);
         nWritten = write(fdTCP, ptr, nLeft);
+        printf("melancia\n");
         if (nWritten == -1) error(2);
+        printf("melao\n");
         nLeft -= nWritten;
         ptr += nWritten;
     }
@@ -569,7 +572,8 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int nQues
 }
 
 void question_submit(int fdTCP, char* token, char* topic, char* userID) {
-    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr = messageSent, *token2, totalSizeStr[10], textFileName[MESSAGE_SIZE];
+    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr = messageSent, *token2, totalSizeStr[10], textFileName[MESSAGE_SIZE],
+    *questionText;
     FILE *fp;
     struct stat st;
     int n, i, totalSize, nRead;
@@ -577,7 +581,7 @@ void question_submit(int fdTCP, char* token, char* topic, char* userID) {
     memset(messageSent, '\0', MESSAGE_SIZE);
     memset(messageReceived, '\0', STANDARDBUFFERSIZE);
 
-    token2 = strtok(token, " ");
+    token2 = strtok(token, " \n");
     if (token2 == NULL) {
         printf("Bad command\n");
         return;
@@ -616,34 +620,31 @@ void question_submit(int fdTCP, char* token, char* topic, char* userID) {
 
     fp = fopen(textFileName, "r");
 
-    while (totalSize >= STANDARDBUFFERSIZE) {
-        nRead = fread(messageSent, 1, STANDARDBUFFERSIZE, fp);
-
-        if (nRead < STANDARDBUFFERSIZE) {
-            *(ptr + nRead) = '\0';
-        }
-
-        printf("\n%s\n", ptr);
-        writeTCP(fdTCP, nRead, ptr);
-        totalSize -= (nRead);
-    }
-
-    ptr += fread(messageSent, 1, totalSize, fp);
-    *ptr = '\0';
-    ptr = messageSent;
-    printf("\n%s\n", ptr);
-    writeTCP(fdTCP, totalSize, ptr);
-
+    questionText = (char*) malloc(sizeof(char) * (totalSize + 3));
+    fread(questionText, 1, totalSize, fp);
+    fclose(fp);
+    
     token2 = strtok(NULL, " \n");
     if (token2 == NULL) {
-        writeTCP(fdTCP, 3, " 0\n");
+        strcat(questionText, " 0\n");
         printf("asd\n");
     }
-    else
+    else {
+        strcat(questionText, " 1\n");
         printf("\n%s\n", token2);
+    }
+
+    printf("\n\n%s\n\n", questionText);
+    writeTCP(fdTCP, totalSize + 3, questionText);
+
+    printf("what happened\n");
 
     ptr = messageReceived;
     readTCP(fdTCP, 8, ptr);
+
+    printf("nothing\n");
+
+    free(questionText);
 
     if (!strcmp(messageReceived, "QUR DUP\n")) {
         printf("Question already exists\n");
@@ -660,9 +661,8 @@ void question_submit(int fdTCP, char* token, char* topic, char* userID) {
     }
     
     printf("%s\n", messageReceived);
-
-    fclose(fp);
     printf("finish\n");
+
 }
 
 int main(int argc, char **argv) {
