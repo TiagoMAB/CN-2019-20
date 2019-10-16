@@ -280,10 +280,10 @@ void dirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, sockle
 
     DIR *d;
     struct dirent *dir;
+    FILE *f;
     int size, qIMG = 0, ansSize = 270, nBytes = 0;
     long fileSize = 0;
     char pathUID[MAX_PATH_SIZE], pathTitle[MAX_PATH_SIZE], pathIMG[MAX_PATH_SIZE], buffer[256] = "", *answer = (char*) malloc(sizeof(char)*ansSize), *buffer2;
-    FILE *f;
 
     sendMessageTCP("QGR ", 4, fd);
 
@@ -322,87 +322,97 @@ void dirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, sockle
     }
 }
 
-char* gqu(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char *topic = readToken(topic, fd, 0);
-    char *question = readToken(topic, fd, 0); 
-    char *answer;
 
-    printf("STDERR: GQU: %s | %s \n", topic, question);
 
-    if (verifyName(topic) || verifyName(question)) {
-        printf("here?");
-        sendMessageTCP("QGR ERR\n", 8, fd);
-        return NULL;
-    }
 
-    char path[MAX_PATH_SIZE];
-    sprintf(path, "%s/%s", topic, question);
 
-    printf("STDERR: Path: %s\n", path);
-    if (!checkDir(topic) || !checkDir(path)) {
-        sendMessageTCP("QGR EOF\n", 8, fd);
-        return NULL;
-    }
 
-    dirInfo(path, question, fd, addr, addrlen);
-    return NULL;
 
-}
+int saveFolder(int fd, char* user, char* name, char* path, struct sockaddr_in *addr, socklen_t *addrlen) {  //checked
 
-int saveFolder(int fd, char* user, char* question, char* path, struct sockaddr_in *addr, socklen_t *addrlen) {
-
-    FILE *f;
-    char pathUID[100], pathTitle[100], *fileSize, *content, *ext, *imgSize;
+    char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
+    char *fileSize, *flag, *ext, *imgSize;
     int size;
+    FILE *f;
 
-    mkdir(path, 0777);                          //FLAGS CORRETAS? //CHAMADA SISTEMA?
+    if (!mkdir(path, 0777)) { return 1; }         
 
-    sprintf(pathUID, "%s/%s_UID.txt", path, question);
-    printf("STDERR: SAVEFOLDER: pathuid: %s\n", pathUID);
-    f = fopen(pathUID, "w");                       //CHAMADA SISTEMA?
-    fwrite(user, 1, strlen(user), f);
-    fclose(f);      
+    sprintf(pathUID, "%s/%s_UID.txt", path, name);
 
-    sprintf(pathTitle, "%s/%s.txt", path, question);
-    if (readAndWrite(pathTitle, "w", 0, fd)) {
-        return 1;
-    }
+    if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
+    fwrite(user, 1, strlen(user), f);                   //check
+    if (fclose(f) == EOF) { return 1; };      
+
+    sprintf(pathTitle, "%s/%s.txt", path, name);
+    if (readAndWrite(pathTitle, "w", 0, fd)) { return 1; }
 
     readToken(NULL, fd, 0);
-    content = readToken(content, fd, 1);
-    printf("content: %s\n", content);
+    flag = readToken(flag, fd, 1);
 
-    if (!strcmp(content, "1")) {
-        char pathIMG[MAX_PATH_SIZE] = "";
+    if (!strcmp(flag, "1")) {
         ext = readToken(ext, fd, 0);
-        sprintf(pathIMG, "%s/%s.%s", path, question, ext);
-        if (readAndWrite(pathIMG, "wb", 0, fd)) {
-            return 1;
-        }
+        sprintf(pathIMG, "%s/%s.%s", path, name, ext);
+        if (readAndWrite(pathIMG, "wb", 0, fd)) { return 1; }
     }
-    else if (!strcmp(content, "0\n")){
-        return 0;
-    }
-    else {
-        return 1;
-    }
+    else if (!strcmp(flag, "0\n")) { return 0; }
+    else { return 1; }
 
-    free(content);
-    content = readToken(content, fd, 1);
-    if (!strcmp(content, "\n")){
-        printf("STDERR: QUS: Message ended with newline character as predicted\n");
-        free(content);
+    flag = readToken(flag, fd, 1);
+    if (!strcmp(flag, "\n")){
+        free(flag);
         return 0;
     }
 
     return 1;
-
 }
 
-void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+void gqu(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char path[MAX_PATH_SIZE], *topic, *question, *user;
+    char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE], *topic, *question;
+
+    topic = readToken(topic, fd, 1);
+    if (topic[strlen(topic)-1] == '\n') {
+        sendMessageTCP("QGR NOK\n", 8, fd);
+        return;
+    }
+
+    question = readToken(question, fd, 1);
+    if (question[strlen(question)-1] != '\n') {
+        sendMessageTCP("QGR NOK\n", 8, fd);
+        return;
+    }
+    else { question[strlen(question)-1] = '\0'; }
+
+    printf("STDERR: GQU: %s | %s \n", topic, question);
+
+    if (verifyName(topic) || verifyName(question)) {
+        sendMessageTCP("QGR ERR\n", 8, fd);
+        return;
+    }
+
+    sprintf(pathTopic, "topics/%s", topic);
+    sprintf(pathQuestion, "topics/%s/%s", topic, question);
+
+    printf("STDERR: Path: %s | Question: %s\n", pathTopic, pathQuestion);
+    if (!checkDir(pathTopic) || !checkDir(pathQuestion)) {
+        sendMessageTCP("QGR EOF\n", 8, fd);
+        return;
+    }
+
+    dirInfo(pathQuestion, question, fd, addr, addrlen);
+}
+
+
+
+
+
+
+
+
+void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {            //checked
+
+    char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE], *topic, *question, *user;
         
     user = readToken(user, fd, 1);
     if (user[strlen(user)-1] == '\n') {
@@ -422,20 +432,19 @@ void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
         return;
     }
 
-    printf("QUS: INFO: %s | %s | %s\n", user, topic, question);
-    sprintf(path, "topics/%s/%s", topic, question);
-    printf("STDERR: QUS: Path: %s", path);
+    sprintf(pathTopic, "topics/%s", topic);
+    sprintf(pathQuestion, "topics/%s/%s", topic, question);
 
     if (!checkUser(user) || verifyName(topic) || verifyName(question)) {
         sendMessageTCP("QUR NOK\n", 8, fd);
     }
-    else if (checkDir(path)) {
+    else if (checkDir(pathQuestion)) {
         sendMessageTCP("QUR DUP\n", 8, fd);
     }
-    else if (dirSize(topic) == MAX_TOPICS) {
+    else if (dirSize(pathTopic) == MAX_TOPICS) {
         sendMessageTCP("QUR FUL\n", 8, fd);
     }
-    else if (saveFolder(fd, user, question, path, addr, addrlen)) {
+    else if (saveFolder(fd, user, question, pathQuestion, addr, addrlen)) {
         sendMessageTCP("QUR NOK\n", 8, fd);
     }
     else {
@@ -447,53 +456,47 @@ void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
 void ans(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char path[MAX_PATH_SIZE], *topic, *question, *user;
-        
+    char pathQuestion[MAX_PATH_SIZE], pathAnswer[MAX_PATH_SIZE], *topic, *question, *user;
+    int size = 0;
+
     user = readToken(user, fd, 1);
     if (user[strlen(user)-1] == '\n') {
-        sendMessageTCP("QUR NOK\n", 8, fd);
+        sendMessageTCP("ANR NOK\n", 8, fd);
         return;
     }
 
     topic = readToken(topic, fd, 1);
     if (topic[strlen(topic)-1] == '\n') {
-        sendMessageTCP("QUR NOK\n", 8, fd);
+        sendMessageTCP("ANR NOK\n", 8, fd);
         return;
     }
 
     question = readToken(question, fd, 1);
     if (question[strlen(question)-1] == '\n') {
-        sendMessageTCP("QUR NOK\n", 8, fd);
+        sendMessageTCP("ANR NOK\n", 8, fd);
         return;
     }
 
-    printf("QUS: INFO: %s | %s | %s\n", user, topic, question);
-    sprintf(path, "topics/%s/%s", topic, question);
-    printf("STDERR: QUS: Path: %s", path);
-
     if (!checkUser(user) || verifyName(topic) || verifyName(question)) {
-        sendMessageTCP("QUR NOK\n", 8, fd);
+        sendMessageTCP("ANR NOK\n", 8, fd);
+        return;
     }
-    else if (dirSize(question) == MAX_TOPICS) {
-        sendMessageTCP("QUR FUL\n", 8, fd);
+
+    sprintf(pathQuestion, "topics/%s/%s", topic, question);
+    size = dirSize(pathQuestion);
+    sprintf(pathAnswer, "topics/%s/%s/%s_%02d", topic, question, question, size + 1);
+
+    if (size == MAX_TOPICS) {
+        sendMessageTCP("ANR FUL\n", 8, fd);
     }
-    else if (saveFolder(fd, user, question, path, addr, addrlen)) {
-        sendMessageTCP("QUR NOK\n", 8, fd);
+    else if (saveFolder(fd, user, question, pathAnswer, addr, addrlen)) {
+        sendMessageTCP("ANR NOK\n", 8, fd);
     }
     else {
         printf("The user: %s has submitted an answer to the question named: %s\n", user, question);
-        sendMessageTCP("QUR OK\n", 8, fd);
+        sendMessageTCP("ANR OK\n", 8, fd);
     }
 }
-
-
-
-
-
-
-
-
-
 
 void handleMessageTCP(int fd) {
 

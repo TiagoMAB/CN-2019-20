@@ -94,7 +94,6 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
     if (nBytes == 0) {
         size = readToken(size, fd, 0);
         if (!(nBytes = atoi(size))) { return 1; }
-        
     }
 
     printf("STDERR: ReadWrite Path: %s | Mode: %s | size: %d\n", path, mode, nBytes);
