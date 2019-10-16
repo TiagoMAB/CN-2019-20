@@ -47,12 +47,9 @@ void error(int error) {
     }
 }
 
-int checkDir(char* topic) {
+int checkDir(char* path) {
 
     DIR *d;
-    char path[MAX_PATH_SIZE] = "";
-
-    sprintf(path, "topics/%s", topic);
     printf("STDERR: CHECKING PATH: %s\n", path);
 
     d = opendir(path);
@@ -176,7 +173,7 @@ char* ptp(char* buffer) {
         return answer;       
     }
 
-    if (!checkUser(id) || verifyName(topic)){
+    if (!checkUser(id) || verifyName(topic)) {
         free(buffer);
         return answer;
     }
@@ -196,21 +193,21 @@ char* ptp(char* buffer) {
 
 char* lqu(char *buffer) {
 
-    char* topic, path[MAX_PATH_SIZE], *answer = (char*) malloc(sizeof(char)*(MAX_TOPICS*(TOPIC_SIZE+3)+8));
+    char* topic, path[MAX_PATH_SIZE] = "", *answer = (char*) malloc(sizeof(char)*(MAX_TOPICS*(TOPIC_SIZE+3)+8));
     int size;
 
     strcpy(answer, "LQR");
     strtok(buffer, " ");
     topic = strtok(NULL, "\n");
-    
-    if (!checkDir(topic)) {
-        free(buffer);
+    printf("%s\n", topic);
+    sprintf(path, "topics/%s", topic);
+    printf("%s\n", path);
+    free(buffer);
+
+    if (!checkDir(path)) {
         strcpy(answer, "ERR\n");
         return answer;
     }
-    
-    sprintf(path, "topics/%s", topic);
-    free(buffer);
 
     size = dirSize(path);
     if (!size) {
@@ -325,14 +322,11 @@ void dirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, sockle
     }
 }
 
-char* gqu(char *buffer, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+char* gqu(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char *topic, *question, *answer;
-
-    free(buffer);
-
-    topic = readToken(topic, fd, 0);
-    question = readToken(topic, fd, 0);
+    char *topic = readToken(topic, fd, 0);
+    char *question = readToken(topic, fd, 0); 
+    char *answer;
 
     printf("STDERR: GQU: %s | %s \n", topic, question);
 
@@ -376,7 +370,7 @@ int saveFolder(int fd, char* user, char* question, char* path, struct sockaddr_i
     }
 
     readToken(NULL, fd, 0);
-    content = readToken(content, fd, 0);
+    content = readToken(content, fd, 1);
     printf("content: %s\n", content);
 
     if (!strcmp(content, "1")) {
@@ -406,118 +400,139 @@ int saveFolder(int fd, char* user, char* question, char* path, struct sockaddr_i
 
 }
 
-char* qus(char *buffer, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char path[MAX_PATH_SIZE], *topic, *question, *user, *answer = (char*) malloc(sizeof(char)*9);
+    char path[MAX_PATH_SIZE], *topic, *question, *user;
+        
+    user = readToken(user, fd, 1);
+    if (user[strlen(user)-1] == '\n') {
+        sendMessageTCP("QUR NOK\n", 8, fd);
+        return;
+    }
 
-    free(buffer);
-    user = readToken(user, fd, 0);
-    topic = readToken(topic, fd, 0);
-    question = readToken(question, fd, 0);
-    
+    topic = readToken(topic, fd, 1);
+    if (topic[strlen(topic)-1] == '\n') {
+        sendMessageTCP("QUR NOK\n", 8, fd);
+        return;
+    }
+
+    question = readToken(question, fd, 1);
+    if (question[strlen(question)-1] == '\n') {
+        sendMessageTCP("QUR NOK\n", 8, fd);
+        return;
+    }
+
     printf("QUS: INFO: %s | %s | %s\n", user, topic, question);
-    
+    sprintf(path, "topics/%s/%s", topic, question);
+    printf("STDERR: QUS: Path: %s", path);
+
     if (!checkUser(user) || verifyName(topic) || verifyName(question)) {
         sendMessageTCP("QUR NOK\n", 8, fd);
-        return NULL;
     }
-
-    sprintf(path, "%s/%s", topic, question);
-    if (checkDir(path)) {
+    else if (checkDir(path)) {
         sendMessageTCP("QUR DUP\n", 8, fd);
-        return NULL;
     }
-
-    if (dirSize(topic) == MAX_TOPICS) {
+    else if (dirSize(topic) == MAX_TOPICS) {
         sendMessageTCP("QUR FUL\n", 8, fd);
-        return NULL; 
     }
-
-    char path2[MAX_PATH_SIZE] = "";
-    sprintf(path2, "topics/%s", path);
-    printf("STDERR: QUS: Path: %s", path2);
-    if (saveFolder(fd, user, question, path2, addr, addrlen)) {
+    else if (saveFolder(fd, user, question, path, addr, addrlen)) {
         sendMessageTCP("QUR NOK\n", 8, fd);
     }
     else {
+        printf("The user: %s has submitted a question named: %s\n", user, question);
         sendMessageTCP("QUR OK\n", 8, fd);
     }
-
-    return NULL;
-
 }
 
 
-char* ans(char *buffer, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+void ans(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char path[MAX_PATH_SIZE], *topic, *question, *user, *answer = (char*) malloc(sizeof(char)*9);
+    char path[MAX_PATH_SIZE], *topic, *question, *user;
+        
+    user = readToken(user, fd, 1);
+    if (user[strlen(user)-1] == '\n') {
+        sendMessageTCP("QUR NOK\n", 8, fd);
+        return;
+    }
 
-    free(buffer);
-    /*    free(readToken(user, fd, addr, addrlen));
-    user = readToken(user, fd, addr, addrlen);
-    topic =  readToken(topic, fd, addr, addrlen);
-    question =  readToken(question, fd, addr, addrlen);
-    */  
+    topic = readToken(topic, fd, 1);
+    if (topic[strlen(topic)-1] == '\n') {
+        sendMessageTCP("QUR NOK\n", 8, fd);
+        return;
+    }
+
+    question = readToken(question, fd, 1);
+    if (question[strlen(question)-1] == '\n') {
+        sendMessageTCP("QUR NOK\n", 8, fd);
+        return;
+    }
 
     printf("QUS: INFO: %s | %s | %s\n", user, topic, question);
-    
+    sprintf(path, "topics/%s/%s", topic, question);
+    printf("STDERR: QUS: Path: %s", path);
+
     if (!checkUser(user) || verifyName(topic) || verifyName(question)) {
         sendMessageTCP("QUR NOK\n", 8, fd);
-        return NULL;
     }
-
-    sprintf(path, "%s/%s", topic, question);
-    if (checkDir(path)) {
-        sendMessageTCP("QUR DUP\n", 8, fd);
-        return NULL;
-    }
-
-    if (dirSize(topic) == MAX_TOPICS) {
+    else if (dirSize(question) == MAX_TOPICS) {
         sendMessageTCP("QUR FUL\n", 8, fd);
-        return NULL; 
     }
-
-    char path2[MAX_PATH_SIZE] = "";
-    sprintf(path2, "topics/%s", path);
-    printf("STDERR: QUS: Path: %s", path2);
-    saveFolder(fd, user, question, path2, addr, addrlen);
-
+    else if (saveFolder(fd, user, question, path, addr, addrlen)) {
+        sendMessageTCP("QUR NOK\n", 8, fd);
+    }
+    else {
+        printf("The user: %s has submitted an answer to the question named: %s\n", user, question);
+        sendMessageTCP("QUR OK\n", 8, fd);
+    }
 }
 
-char* handleMessageTCP(char *buffer, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char* message = (char*) malloc(sizeof(char)*(1+strlen(buffer)));
+
+
+
+
+
+
+
+
+void handleMessageTCP(int fd) {
+
+    char* message;
     char* token = NULL;
-    int result = -1;
+    int result = -1, client;
+    struct sockaddr_in addr;
+    socklen_t addrlen;
 
-    strcpy(message, buffer);
-    token = strtok(message, " \n"); 
+    addrlen = sizeof(addr);
+    if ((client = accept(fd, (struct sockaddr*)&addr, &addrlen)) == -1) error(2); //check error code
+    
+    message = readToken(message, client, 1);
 
-    if (token != NULL) {
-        result = checkProtocol(token);
+    if (message != NULL) {
+        result = checkProtocol(message);
     }
     free(message);
 
     switch (result) {
         case GQU:
-            return gqu(buffer, fd, addr, addrlen);
+            gqu(client, &addr, &addrlen);
             break;
 
         case QUS:
-            return qus(buffer, fd, addr, addrlen);
+            qus(client, &addr, &addrlen);
             break;
 
         case ANS:
-            return ans(buffer, fd, addr, addrlen);
+            ans(client, &addr, &addrlen);
             break;
 
         default:
-            free(buffer);
-            buffer = (char*) malloc(sizeof(char)*5);
-            strcpy(buffer, "ERR\n");
-            return buffer;
+            printf("Unexpected protocol message received, notifying client.\n");
+            sendMessageTCP("ERR\n", 4, client);
             break;
     }
+
+    close(client);
 }
 
 void handleMessageUDP(int fd) {
@@ -559,6 +574,7 @@ void handleMessageUDP(int fd) {
 
         default:
             free(buffer);
+            printf("Unexpected protocol message received, notifying client.\n");
             sendMessageUDP("ERR\n", fd, addr, addrlen);
             return;
     }
@@ -571,8 +587,6 @@ int main(int argc, char **argv) {
 
     int option, p = 0, fdUDP, fdTCP, err;
     char *fsport = PORT, *buffer;
-    struct sockaddr_in addr;
-    socklen_t addrlen;
     fd_set rfds;
     
     while ((option = getopt (argc, argv, "p:")) != -1) {
@@ -631,11 +645,7 @@ int main(int argc, char **argv) {
 
         /*Reads input from an TCP connection*/
         if (FD_ISSET(fdTCP, &rfds)) {
-            int client;
-            addrlen = sizeof(addr);
-            if ((client = accept(fdTCP, (struct sockaddr*)&addr, &addrlen)) == -1) error(2); //check error code
-            handleMessageTCP(readToken(buffer, client, 0), client, &addr, &addrlen);
-            close(client);
+            handleMessageTCP(fdTCP);
         }
     }
 

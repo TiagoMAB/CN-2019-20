@@ -212,6 +212,7 @@ int startUDP(char* address, char* port) {
     if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) exit(2);  //exit
     if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) exit(2);  //exit
     
+    free(res);
     return fd;
 }
 
@@ -232,5 +233,6 @@ int startTCP(char* address, char* port) {
     if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) exit(2);     //exit
     if (listen(fd, 5) == -1) exit(2);       //exit
 
+    free(res);
     return fd;
 }
