@@ -309,7 +309,6 @@ char** topicPropose(int fdUDP, char* token, char* userID, int* nTopics, char** t
 
         tList[*nTopics - 1] = (char*) malloc(sizeof(char) * TOPICSIZE);
         strcpy(tList[*nTopics - 1], topic);
-        printf("%s\n", token);
     }
     else if (!strcmp(messageReceived, "PTR DUP\n")) {
         printf("Topic \"%s\" already exists\n", token);
@@ -599,13 +598,17 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
     memset(messageSent, '\0', MESSAGE_SIZE);
     memset(messageReceived, '\0', STANDARDBUFFERSIZE);
 
+    if (isAnswerSubmit) {
+        printf("%s\n", qList[*sQuestion]);
+        ptr = strtok(qList[*sQuestion], ":");
+        printf("%s\n", ptr);
+    }
+
     token2 = strtok(token, " \n");
     if (token2 == NULL) {
         printf("Bad command\n");
         return qList;
     }
-    
-    printf("%s\n", token2);
 
     if (isAnswerSubmit) {
         strcat(messageSent, "ANS ");
@@ -617,11 +620,11 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
     strcat(messageSent, userID); strcat(messageSent, " "); strcat(messageSent, topic); strcat(messageSent, " ");
     
     if (isAnswerSubmit) {
-        strcat(messageSent, qList[*sQuestion]);
+        strcat(messageSent, ptr);
     }
     else {
         strcat(messageSent, token2);
-        strcat(question, userID); strcat(question, ":"); strcat(question, token2); strcat(question, ":0");
+        strcat(question, token2); strcat(question, ":"); strcat(question, userID); strcat(question, ":0");
     }
 
     if (!isAnswerSubmit) {
@@ -633,7 +636,6 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
     }
 
     strcpy(textFileName, token2);
-        printf("banana\n");
     strcat(textFileName, ".txt");
 
     n = stat(textFileName, &st);
@@ -724,7 +726,6 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
 
     ptr = messageReceived;
     readTCP(fdTCP, 8, ptr);
-    printf("\n%s\n", ptr);
 
     if (!strcmp(messageReceived, "QUR DUP\n")) {
         printf("Question already exists\n");
@@ -753,7 +754,6 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
 
         qList[*nQuestions - 1] = (char*) malloc(sizeof(char) * QUESTIONSIZE);
         strcpy(qList[*nQuestions - 1], question);
-        printf("banana\n");
     }
     else if (!strcmp(messageReceived, "QUR NOK\n")) {
         printf("Unknown error\n");
