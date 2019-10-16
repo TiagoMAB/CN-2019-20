@@ -235,3 +235,18 @@ int startTCP(char* address, char* port) {
     free(res);
     return fd;
 }
+
+int checkDir(char* path) {
+
+    DIR *d;
+    printf("STDERR: CHECKING PATH: %s\n", path);
+
+    d = opendir(path);
+    if (d) { 
+        closedir(d); 
+        return 1; 
+    }
+    else if (ENOENT == errno) { return 0;}
+    else { exit(1); } //CHECK
+
+}

@@ -25,4 +25,6 @@ int startUDP(char* address, char* port);
 
 int startTCP(char* address, char* port);
 
+int checkDir(char* path);
+
 #endif

@@ -25,9 +25,8 @@
 enum options { REG, LTP, PTP, LQU, GQU, QUS, ANS };
 
 struct stat s = {0};
-int nTopics;
 
-void error(int error) {
+void error(int error) {         //check if will use
 
     switch (error) {
     case 1:
@@ -47,72 +46,7 @@ void error(int error) {
     }
 }
 
-int checkDir(char* path) {
-
-    DIR *d;
-    printf("STDERR: CHECKING PATH: %s\n", path);
-
-    d = opendir(path);
-    if (d) { 
-        closedir(d); 
-        return 1; 
-    }
-    else if (ENOENT == errno) { return 0;}
-    else { exit(1); } //CHECK
-
-}
-
-char* getDirContent(char* path, char* answer, int flag) {
-
-    DIR *d;
-    struct dirent *dir;
-
-    d = opendir(path);
-    if (d) {
-        while ((dir = readdir(d)) != NULL) {
-            if ((dir->d_type == DT_DIR) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
-                char fName[37], subDir[11], id[6];
-                FILE *f;
-
-                strcpy(subDir, dir->d_name);
-                sprintf(fName, "%s/%s/%s_UID.txt", path, subDir, subDir);
-
-                f = fopen(fName, "r");              //CHAMADA SISTEMA?
-                sprintf(fName, "%s/%s", path, subDir);
-
-                fgets(id, 6, f);
-                if (flag) {
-                    sprintf(answer, "%s %s:%s:%d", answer, subDir, id, dirSize(fName));
-                }
-                else {
-                    sprintf(answer, "%s %s:%s", answer, subDir, id);
-                }
-
-                fclose(f);                          //CHAMADA SISTEMA?
-            }
-        }
-        closedir(d);                                //CHAMADA SISTEMA?
-    }
-    return answer;
-}
-
-void createTopic(char* topic, char* id) {
-
-    char path[MAX_PATH_SIZE] = "";
-    FILE *f;
-    
-    sprintf(path, "topics/%s", topic);
-    mkdir(path, 0777);                          //FLAGS CORRETAS? //CHAMADA SISTEMA?
-
-    sprintf(path, "topics/%s/%s_UID.txt", topic, topic);
-    f = fopen(path, "w");                       //CHAMADA SISTEMA?
-    fwrite(id, 1, strlen(id), f);
-    fclose(f);                                  //CHAMADA SISTEMA?
-    
-    nTopics++;
-}   
-
-int checkProtocol(char* token) {
+int checkProtocol(char* token) {  //check
 
     char *opts[] = { "REG", "LTP", "PTP", "LQU", "GQU", "QUS", "ANS" };
     int i;
@@ -125,7 +59,42 @@ int checkProtocol(char* token) {
     return i;
 }
 
-char* reg(char* buffer) {
+char* getDirContent(char* path, char* answer, int flag) {       //check
+
+    DIR *d;
+    FILE *f;
+    struct dirent *dir;
+
+    d = opendir(path);
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if ((dir->d_type == DT_DIR) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
+                char subPath[MAX_PATH_SIZE], subDir[11], id[6];
+
+                strcpy(subDir, dir->d_name);
+                sprintf(subPath, "%s/%s/%s_UID.txt", path, subDir, subDir);
+
+                if ((f = fopen(subPath, "r")) == NULL ) { free(answer); return NULL; }
+                sprintf(subPath, "%s/%s", path, subDir);
+
+                if (fgets(id, 6, f) == NULL ) { free(answer); return NULL; }
+                if (flag) {
+                    sprintf(answer, "%s %s:%s:%d", answer, subDir, id, dirSize(subPath));
+                }
+                else {
+                    sprintf(answer, "%s %s:%s", answer, subDir, id);
+                } 
+
+                if (fclose(f) == EOF) { free(answer); return NULL; }                        //CHAMADA SISTEMA?
+            }
+        }
+        if (closedir(d)) { free(answer); return NULL; }                                //CHAMADA SISTEMA?
+        return answer;
+    }
+    else { free(answer); return NULL; }
+}
+
+char* reg(char* buffer) {  //check
 
     char* id;
     char* answer = (char*)malloc(sizeof(char)*9);
@@ -142,14 +111,20 @@ char* reg(char* buffer) {
     return answer;
 }
 
-char* ltp(char* buffer) {
+char* ltp(char* buffer) { //check
 
-    char* answer = (char*)malloc(sizeof(char)*((TOPIC_SIZE)*(nTopics)+8));
+    char* answer = (char*)malloc(sizeof(char)*((TOPIC_SIZE)*(MAX_TOPICS+1)));
     strcpy(answer, "ERR\n");
 
     if (strlen(buffer) == 4) {
-        sprintf(answer, "LTR %d", nTopics);
+        sprintf(answer, "LTR %d", dirSize("topics"));
         answer = getDirContent("topics", answer, 0);
+        if (answer == NULL) { 
+            free(buffer); 
+            answer = (char*)malloc(sizeof(char)*4);
+            strcpy(answer, "ERR\n");
+            return answer; 
+        }
         strcat(answer, "\n");
     }
 
@@ -157,17 +132,18 @@ char* ltp(char* buffer) {
     return answer;
 }
 
-char* ptp(char* buffer) {
+char* ptp(char* buffer) {           //check
 
-    char *id, *topic;
+    char *id, *topic, path[MAX_PATH_SIZE] = "";
     char* answer = (char*)malloc(sizeof(char)*9);
+    FILE *f;
     
     strcpy(answer, "PTR NOK\n");
     strtok(buffer, " ");
     id = strtok(NULL, " ");
     topic = strtok(NULL, "\n");
 
-    if (nTopics == MAX_TOPICS) {
+    if (dirSize("topics") == MAX_TOPICS) {
         free(buffer);
         strcpy(answer, "PTR FUL\n");
         return answer;       
@@ -178,20 +154,37 @@ char* ptp(char* buffer) {
         return answer;
     }
 
-    if (checkDir(topic)) {
+    sprintf(path, "topics/%s", topic);
+    if (checkDir(path)) {
         strcpy(answer, "PTR DUP\n");
         free(buffer);
         return answer;
     }
+    
+    if (mkdir(path, 0777)) { 
+        strcpy(answer, "PTR NOK\n");
+        return answer; 
+    }                         
 
-    createTopic(topic, id);
+    sprintf(path, "topics/%s/%s_UID.txt", topic, topic);
+    if ((f = fopen(path, "w")) == NULL ) { 
+        strcpy(answer, "PTR NOK\n");
+        return answer; 
+    } 
+                  
+    fwrite(id, 1, strlen(id), f);
+    if (fclose(f) == EOF) {
+        strcpy(answer, "PTR NOK\n");
+        return answer; 
+    }                             
+    
     strcpy(answer, "PTR OK\n");
 
     free(buffer);
     return answer;
 }
 
-char* lqu(char *buffer) {
+char* lqu(char *buffer) {       //check
 
     char* topic, path[MAX_PATH_SIZE] = "", *answer = (char*) malloc(sizeof(char)*(MAX_TOPICS*(TOPIC_SIZE+3)+8));
     int size;
@@ -199,9 +192,8 @@ char* lqu(char *buffer) {
     strcpy(answer, "LQR");
     strtok(buffer, " ");
     topic = strtok(NULL, "\n");
-    printf("%s\n", topic);
+
     sprintf(path, "topics/%s", topic);
-    printf("%s\n", path);
     free(buffer);
 
     if (!checkDir(path)) {
@@ -217,9 +209,34 @@ char* lqu(char *buffer) {
 
     sprintf(answer, "%s %d", answer, size);
     answer = getDirContent(path, answer, 1);
+    if (answer == NULL) { 
+        free(buffer); 
+        answer = (char*)malloc(sizeof(char)*4);
+        strcpy(answer, "ERR\n");
+        return answer; 
+    }
     strcat(answer, "\n");
     return answer;    
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void handleFolder(char* path, char* dirName, int fd) {
 
@@ -276,6 +293,8 @@ void handleFolder(char* path, char* dirName, int fd) {
     }
 
 }
+
+
 void dirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
     DIR *d;
@@ -329,6 +348,22 @@ void dirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, sockle
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int saveFolder(int fd, char* user, char* name, char* path, struct sockaddr_in *addr, socklen_t *addrlen) {  //checked
 
     char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
@@ -336,7 +371,7 @@ int saveFolder(int fd, char* user, char* name, char* path, struct sockaddr_in *a
     int size;
     FILE *f;
 
-    if (!mkdir(path, 0777)) { return 1; }         
+    if (mkdir(path, 0777)) { return 1; }         
 
     sprintf(pathUID, "%s/%s_UID.txt", path, name);
 
@@ -612,7 +647,6 @@ int main(int argc, char **argv) {
         printf("Server could not create topics folder, exiting now\n");   //substituir por error
         exit(1);
     }
-    nTopics = dirSize("topics");
 
     //Initializing UDP socket
     fdUDP = startUDP(NULL, fsport);
