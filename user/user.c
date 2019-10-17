@@ -198,7 +198,6 @@ char* registerID(int fdUDP, char* token) {
     // If "RGR NOK" is received, it was not possible to register user
     if (!invalid) {
         strcat(messageSent, "REG "); strcat(messageSent, token); strcat(messageSent, "\n");
-        fprintf(stderr, "STDERR: %s", messageSent); // TO REMOVE
 
         n = sendto(fdUDP, messageSent, strlen(messageSent), 0, resUDP->ai_addr, resUDP->ai_addrlen);
         if (n == -1) error(2);
@@ -206,8 +205,6 @@ char* registerID(int fdUDP, char* token) {
         addrlen = sizeof(addr);
         n = recvfrom(fdUDP, messageReceived, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
         if (n == -1) error(2);
-
-        fprintf(stderr, "STDERR: %s", messageReceived); // TO REMOVE
 
         if (!strcmp(messageReceived, "RGR OK\n")) {
             printf("Register success\n");
@@ -446,7 +443,8 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 
 char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, char* topic, char* question, char* dirPath) {
     char *token, *extension, fileName[STANDARDBUFFERSIZE], filePath[STANDARDBUFFERSIZE], an[2];
-    int totalSize, numSize = 1;
+    int numSize = 1;
+    long totalSize;
     FILE* fp;
 
     if (isAnswer) {
@@ -473,7 +471,8 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
     *ptr = '\0';
     token = strtok((ptr - numSize), " ");
 
-    totalSize = atoi(token);
+    if (strlen(token) > 10) error(2);
+    totalSize = strtoul(token, NULL, 10);
 
     strcpy(filePath, dirPath); strcat(filePath, "/"); strcat(filePath, question);
 
@@ -526,7 +525,8 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
 
         *ptr = '\0';
         token = strtok((ptr - numSize), " ");
-        totalSize = atoi(token);
+        if (strlen(token) > 10) error(2);
+        totalSize = strtoul(token, NULL, 10);
 
         memset(messageReceived, '\0', STANDARDBUFFERSIZE);
         ptr = messageReceived;
@@ -642,7 +642,7 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int* sQue
     token = strtok((ptr - numSize), " ");
 
     nAnswers = atoi(token);
-    
+
     while (nAnswers) {
         ptr = questionGetAux(1, fdTCP, messageReceived, ptr, topic, qList[questionSelected], dirPath);
         readTCP(fdTCP, 1, ptr);
@@ -856,8 +856,6 @@ int main(int argc, char **argv) {
     }
 
     if (optind < argc) error(1);
-    
-    fprintf(stderr, "STDERR: %s %s %i\n", fsip, fsport, optind); // TO REMOVE
 
     pid = getpid();
     sprintf(pidStr, "%d", pid);
