@@ -85,7 +85,7 @@ char* readToken(char* answer, int fdTCP, int flag) {
 int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
     int readBytes = 0;
-    char* buffer = (char*) malloc(sizeof(char)*(BUFFER_SIZE+1));
+    char* buffer[BUFFER_SIZE+1];
     char* size;
     FILE *f;
 
@@ -96,7 +96,7 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
         if (!(nBytes = atoi(size))) { return 1; }
     }
 
-    printf("STDERR: ReadWrite Path: %s | Mode: %s | size: %d\n", path, mode, nBytes);
+
 
     while (nBytes > BUFFER_SIZE) {
         readBytes = read(fd, buffer, BUFFER_SIZE);
@@ -111,7 +111,7 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
         nBytes -= readBytes;
         fwrite(buffer, readBytes, 1, f);
     }
-    printf("STDERR: ReadWrite Path: %s | Mode: %s | Missing: %d\n", path, mode, nBytes);
+    free(size);
     fclose(f);
     return 0;
 
@@ -120,16 +120,14 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
 char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    int size = 4, data;
+    int size = 4, data = 4;
 
     buffer = (char*) malloc(sizeof(char)*size);
     *addrlen = sizeof(addr);
-    printf("STDERR: Buffer progression: %d", size);
 
     do {
         free(buffer);
         size *= 2;
-        printf("  %d", size);
         
         buffer = (char*) malloc(sizeof(char)*size);
         data = recvfrom(fdUDP, buffer, size - 1, MSG_PEEK, (struct sockaddr*)addr, addrlen);
@@ -141,7 +139,6 @@ char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_
     data = recvfrom(fdUDP, buffer, data, 0, (struct sockaddr*)addr, addrlen);
     buffer[data] = '\0';
 
-    printf("\nSTDERR: | Size: %ld | data: %d | MESSAGE RECEIVED: %s", strlen(buffer), data, buffer);
     return buffer;
 }
 
@@ -151,23 +148,20 @@ void sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t 
     addrlen = sizeof(addr);
     n = sendto(fdUDP, buffer, strlen(buffer), 0, (struct sockaddr*)&addr, addrlen);
     if (n == -1) exit(2); //check error
-    printf("STDERR: Size: %ld | MESSAGE SENT: %s", strlen(buffer), buffer);
 }
 
 
-int readAndSendFile(char* path, char* mode, int fd) {
+int readAndSend(char* path, char* mode, int fd) {
 
     FILE *f;
     int size = 0;
     char *buffer, fileSize[12];  //to see if needs changing
 
-    printf("STDERR: Sending: %d bytes (mode %s) from path %s\n", size, mode, path);
     f = fopen(path, mode);
 
     fseek(f, 0 , SEEK_END);
     size = ftell(f);
     fseek(f, 0 , SEEK_SET);
-    printf("STDERR: Sending: %d bytes (mode %s) from path %s\n", size, mode, path);
     if (!strcmp(mode, "rb")) {
         sprintf(fileSize, " %d ", size);
         sendMessageTCP(fileSize, strlen(fileSize), fd);
@@ -185,15 +179,19 @@ int readAndSendFile(char* path, char* mode, int fd) {
     return 0;
 }
 
-void sendMessageTCP(char* buffer, int size, int fdTCP) {
+int sendMessageTCP(char* buffer, int size, int fdTCP) {
 
     int n;
 
-    printf("STDERR: Size: %d | MESSAGE to ben sent TCP: %s\n", size, buffer);
     n = write(fdTCP, buffer, size);
-    if (n == -1) exit(2);
-    printf("STDERR: Size: %d | MESSAGE SENT TCP: %s\n", size, buffer);
+    if (n == -1) { return 1; }
+
+    return 0;
 }
+
+
+
+
 
 int startUDP(char* address, char* port) {
 
@@ -239,7 +237,6 @@ int startTCP(char* address, char* port) {
 int checkDir(char* path) {
 
     DIR *d;
-    printf("STDERR: CHECKING PATH: %s\n", path);
 
     d = opendir(path);
     if (d) { 
@@ -248,5 +245,4 @@ int checkDir(char* path) {
     }
     else if (ENOENT == errno) { return 0;}
     else { exit(1); } //CHECK
-
 }

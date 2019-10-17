@@ -17,9 +17,9 @@ char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_
 
 void sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen);
 
-int readAndSendFile(char* path, char* mode, int fd);
+int readAndSend(char* path, char* mode, int fd);
 
-void sendMessageTCP(char* buffer, int size, int fdTCP);
+int sendMessageTCP(char* buffer, int size, int fdTCP);
 
 int startUDP(char* address, char* port);
 

@@ -26,27 +26,7 @@ enum options { REG, LTP, PTP, LQU, GQU, QUS, ANS };
 
 struct stat s = {0};
 
-void error(int error) {         //check if will use
-
-    switch (error) {
-    case 1:
-        fprintf(stdout, "ERR: Format incorrect. Should be: ./FS [-p FSport]\n");
-        exit(error);
-    
-    case 2:
-        fprintf(stdout, "ERR: Something went wrong with UDP or TCP connection\n");
-        exit(error);
-
-    case 3:
-        fprintf(stdout, "ERR: Message too big, data loss expected\n");
-        exit(error);
-
-    default:
-        break;
-    }
-}
-
-int checkProtocol(char* token) {  //check
+int checkProtocol(char* token) {  
 
     char *opts[] = { "REG", "LTP", "PTP", "LQU", "GQU", "QUS", "ANS" };
     int i;
@@ -59,7 +39,136 @@ int checkProtocol(char* token) {  //check
     return i;
 }
 
-char* getDirContent(char* path, char* answer, int flag) {       //check
+int handleFolder(char* path, char* dirName, int fd) {      
+
+    char pathUID[MAX_PATH_SIZE], pathTitle[MAX_PATH_SIZE], ext[4], pathIMG[MAX_PATH_SIZE];
+    int qIMG = 0;
+    struct dirent *dir;  
+    DIR *d;
+
+    sprintf(pathUID, "%s/%s_UID.txt", path, dirName);
+    sprintf(pathTitle, "%s/%s.txt", path, dirName);
+
+    readAndSend(pathUID, "r", fd);
+    readAndSend(pathTitle, "rb", fd);
+
+    d = opendir(path);
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            sprintf(pathUID, "%s_UID.txt", dirName);
+            sprintf(pathTitle, "%s.txt", dirName);
+
+            if ((dir->d_type != DT_DIR) && strcmp(dir->d_name, pathUID) && strcmp(dir->d_name, pathTitle)) {
+                char d_name[20], *token;
+
+                strcpy(d_name, dir->d_name);
+                token = strtok(d_name, ".");
+                token = strtok(NULL, "");
+                strcpy(ext, token);
+                
+                qIMG = 1;
+                sprintf(pathIMG, "%s/%s.%s", path, d_name, ext);       
+            }
+        }
+        if (closedir(d)) { return 1; }     
+    }
+    else { return 1; }
+
+    if (qIMG) { 
+        if (sendMessageTCP(" 1 ", 3, fd)) { return 1; }
+        if (sendMessageTCP(ext, strlen(ext), fd)) { return 1; }
+        if (readAndSend(pathIMG, "rb", fd)) { return 1; }
+    }
+    else {
+        if (sendMessageTCP(" 0", 2, fd)) { return 1; }
+    }
+    return 0;
+}
+
+int sendDirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {  //falta checkar
+
+    char AN[4], pathAnswer[MAX_PATH_SIZE], answerDir[MAX_PATH_SIZE], answer[5];
+    int size;
+
+    if ( sendMessageTCP("QGR ", 4, fd) || handleFolder(path, dirName, fd)) {
+        return 1;
+    }
+    
+    size = dirSize(path);
+    if (size >= 10) {
+        if (sendMessageTCP(" 10 ", 4, fd)) { return 1; }
+    }
+    else if (size == 0) {
+        if (sendMessageTCP(" 0\n", 3, fd)) { return 1; }
+        return 0;
+    }
+    else {
+        sprintf(answer, " %d ", size);
+        if (sendMessageTCP(answer, strlen(answer), fd)) { return 1; }
+    }
+
+    for (int i = 10; i > 0 && size > 0; i--) {
+        sprintf(answerDir, "%s_%02d",  dirName, size);
+        sprintf(pathAnswer, "%s/%s", path, answerDir);
+        sprintf(AN, "%02d ", size);
+        
+        if (sendMessageTCP(AN, strlen(AN), fd) || handleFolder(pathAnswer, answerDir, fd)) { 
+            return 1; 
+        }
+        
+        size--;
+        if (size && i) {
+            if (sendMessageTCP(" ", 1, fd)) { return 1; }
+        }
+        else {
+            if (sendMessageTCP("\n", 1, fd)) { return 1; }
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+int saveFolder(int fd, char* user, char* name, char* path, struct sockaddr_in *addr, socklen_t *addrlen) {  //checked
+
+    char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
+    char *flag = NULL, *ext = NULL;
+    FILE *f;
+
+    if (mkdir(path, 0777)) { return 1; }         
+
+    sprintf(pathUID, "%s/%s_UID.txt", path, name);
+
+    if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
+    fwrite(user, 1, strlen(user), f);                   //check
+    if (fclose(f) == EOF) { return 1; };      
+
+    sprintf(pathTitle, "%s/%s.txt", path, name);
+    if (readAndWrite(pathTitle, "w", 0, fd)) { return 1; }
+
+    free(readToken(NULL, fd, 0));
+    flag = readToken(flag, fd, 1);
+
+    if (!strcmp(flag, "1")) {
+        ext = readToken(ext, fd, 0);
+        sprintf(pathIMG, "%s/%s.%s", path, name, ext);
+        if (readAndWrite(pathIMG, "wb", 0, fd)) { free(ext); free(flag); return 1; }
+    }
+    else if (!strcmp(flag, "0\n")) { free(flag); return 0; }
+    else { free(flag); return 1; }
+
+    free(flag);
+    flag = readToken(flag, fd, 1);
+    if (!strcmp(flag, "\n")){
+        free(ext); free(flag);
+        return 0;
+    }
+
+    free(flag); free(ext);
+    return 1;
+}
+
+char* getDirContent(char* path, char* answer, int flag) {     
 
     DIR *d;
     FILE *f;
@@ -85,16 +194,16 @@ char* getDirContent(char* path, char* answer, int flag) {       //check
                     sprintf(answer, "%s %s:%s", answer, subDir, id);
                 } 
 
-                if (fclose(f) == EOF) { free(answer); return NULL; }                        //CHAMADA SISTEMA?
+                if (fclose(f) == EOF) { free(answer); return NULL; }                 
             }
         }
-        if (closedir(d)) { free(answer); return NULL; }                                //CHAMADA SISTEMA?
+        if (closedir(d)) { free(answer); return NULL; }                                
         return answer;
     }
     else { free(answer); return NULL; }
 }
 
-char* reg(char* buffer) {  //check
+char* reg(char* buffer) { 
 
     char* id;
     char* answer = (char*)malloc(sizeof(char)*9);
@@ -107,11 +216,12 @@ char* reg(char* buffer) {  //check
         strcpy(answer, "RGR OK\n");
     }
 
+    printf("A new user has been registered: %s\n", id);
     free(buffer);
     return answer;
 }
 
-char* ltp(char* buffer) { //check
+char* ltp(char* buffer) { 
 
     char* answer = (char*)malloc(sizeof(char)*((TOPIC_SIZE)*(MAX_TOPICS+1)));
     strcpy(answer, "ERR\n");
@@ -128,11 +238,12 @@ char* ltp(char* buffer) { //check
         strcat(answer, "\n");
     }
 
+    printf("There was a request to list all topics\n");
     free(buffer);
     return answer;
 }
 
-char* ptp(char* buffer) {           //check
+char* ptp(char* buffer) {          
 
     char *id, *topic, path[MAX_PATH_SIZE] = "";
     char* answer = (char*)malloc(sizeof(char)*9);
@@ -163,30 +274,34 @@ char* ptp(char* buffer) {           //check
     
     if (mkdir(path, 0777)) { 
         strcpy(answer, "PTR NOK\n");
+        free(buffer);
         return answer; 
     }                         
 
     sprintf(path, "topics/%s/%s_UID.txt", topic, topic);
     if ((f = fopen(path, "w")) == NULL ) { 
         strcpy(answer, "PTR NOK\n");
+        free(buffer);
         return answer; 
     } 
                   
     fwrite(id, 1, strlen(id), f);
     if (fclose(f) == EOF) {
         strcpy(answer, "PTR NOK\n");
+        free(buffer);
         return answer; 
     }                             
     
+    printf("The user: %s has proposed a new topic named: %s\n", id, topic);
     strcpy(answer, "PTR OK\n");
-
     free(buffer);
     return answer;
 }
 
-char* lqu(char *buffer) {       //check
+char* lqu(char *buffer) {       
 
-    char* topic, path[MAX_PATH_SIZE] = "", *answer = (char*) malloc(sizeof(char)*(MAX_TOPICS*(TOPIC_SIZE+3)+8));
+    char *topic, *answer = (char*) malloc(sizeof(char)*(MAX_TOPICS*(TOPIC_SIZE+3)+8)),
+        path[MAX_PATH_SIZE] = ""; 
     int size;
 
     strcpy(answer, "LQR");
@@ -194,15 +309,16 @@ char* lqu(char *buffer) {       //check
     topic = strtok(NULL, "\n");
 
     sprintf(path, "topics/%s", topic);
-    free(buffer);
 
     if (!checkDir(path)) {
+        free(buffer);
         strcpy(answer, "ERR\n");
         return answer;
     }
 
     size = dirSize(path);
     if (!size) {
+        free(buffer);
         strcat(answer, " 0\n");
         return answer;
     }
@@ -215,255 +331,75 @@ char* lqu(char *buffer) {       //check
         strcpy(answer, "ERR\n");
         return answer; 
     }
+
+    printf("There was a request to list questions of the topic: %s\n", topic);
+    free(buffer);
     strcat(answer, "\n");
     return answer;    
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void handleFolder(char* path, char* dirName, int fd) {
-
-    DIR *d;
-    struct dirent *dir;
-    int size, qIMG = 0, ansSize = 270, nBytes = 0;
-    long fileSize = 0;
-    char pathUID[MAX_PATH_SIZE], pathTitle[MAX_PATH_SIZE], ext[4], pathIMG[MAX_PATH_SIZE], buffer[256] = "", *answer = (char*) malloc(sizeof(char)*ansSize), *buffer2;
-
-    sprintf(pathUID, "topics/%s/%s_UID.txt", path, dirName);
-    sprintf(pathTitle, "topics/%s/%s.txt", path, dirName);
-    printf("STDERR: Question INFO: pathUID: %s | pathTitle: %s | path: %s\n", pathUID, pathTitle, path);
-
-    readAndSendFile(pathUID, "r", fd);
-    readAndSendFile(pathTitle, "rb", fd);
-
-    char att[233];
-    sprintf(att, "topics/%s", path);
-
-    d = opendir(att);
-    if (d) {
-        while ((dir = readdir(d)) != NULL) {
-            char uid[200], title[200];
-            sprintf(uid, "%s_UID.txt", dirName);
-            sprintf(title, "%s.txt", dirName);
-            printf("\n : %s\n", uid);
-            printf("\n : %s\n", title);
-                
-            if ((dir->d_type != DT_DIR) && strcmp(dir->d_name, uid) && strcmp(dir->d_name, title)) {
-                char d_name[20], *token;
-                strcpy(d_name, dir->d_name);
-                token = strtok(d_name, ".");
-                token = strtok(NULL, "");
-                strcpy(ext, token);
-                qIMG = 1;
-                sprintf(pathIMG, "topics/%s/%s.%s", path, d_name, ext);
-                printf("STDERR: %s\n",pathIMG);
-                
-            }
-        }
-        closedir(d);                                //CHAMADA SISTEMA?
-    }
-    else {
-
-    }
-
-    if (qIMG) { 
-        sendMessageTCP(" 1 ", 3, fd);
-        sendMessageTCP(ext, strlen(ext), fd);
-        readAndSendFile(pathIMG, "rb", fd);    
-    }
-    else {
-        sendMessageTCP(" 0", 2, fd);
-    }
-
-}
-
-
-void dirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
-
-    DIR *d;
-    struct dirent *dir;
-    FILE *f;
-    int size, qIMG = 0, ansSize = 270, nBytes = 0;
-    long fileSize = 0;
-    char pathUID[MAX_PATH_SIZE], pathTitle[MAX_PATH_SIZE], pathIMG[MAX_PATH_SIZE], buffer[256] = "", *answer = (char*) malloc(sizeof(char)*ansSize), *buffer2;
-
-    sendMessageTCP("QGR ", 4, fd);
-
-    handleFolder(path, dirName, fd);
-    
-    char att[233];
-    printf("STDERR: path handle: %s\n", path);
-    sprintf(att, "topics/%s", path);
-    size = dirSize(att);
-    if (size >= 10) {
-        sendMessageTCP(" 10 ", 4, fd);
-    }
-    else if (size == 0) {
-        sendMessageTCP(" 0\n", 3, fd);
-    }
-    else {
-        sprintf(answer, " %d ", size);
-        sendMessageTCP(answer, strlen(answer), fd);
-    }
-
-    for (int i = 10; i > 0 && size > 0; i--) {
-        char pathAnswer[1000] = "", AN[4] = "", d_name[300] = "";
-        sprintf(d_name, "%s_%02d", dirName, size);
-        sprintf(pathAnswer, "%s/%s_%02d", path, dirName, size);
-        sprintf(AN, "%02d ", size);
-        sendMessageTCP(AN, strlen(AN), fd);
-        printf("STDERR: pathanswer: %s\n", pathAnswer);
-        handleFolder(pathAnswer, d_name, fd);
-        size--;
-        if (size && i) {
-            sendMessageTCP(" ", 1, fd);
-        }
-        else {
-            sendMessageTCP("\n", 1, fd);
-        }
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-int saveFolder(int fd, char* user, char* name, char* path, struct sockaddr_in *addr, socklen_t *addrlen) {  //checked
-
-    char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
-    char *fileSize, *flag, *ext, *imgSize;
-    int size;
-    FILE *f;
-
-    if (mkdir(path, 0777)) { return 1; }         
-
-    sprintf(pathUID, "%s/%s_UID.txt", path, name);
-
-    if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
-    fwrite(user, 1, strlen(user), f);                   //check
-    if (fclose(f) == EOF) { return 1; };      
-
-    sprintf(pathTitle, "%s/%s.txt", path, name);
-    if (readAndWrite(pathTitle, "w", 0, fd)) { return 1; }
-
-    readToken(NULL, fd, 0);
-    flag = readToken(flag, fd, 1);
-
-    if (!strcmp(flag, "1")) {
-        ext = readToken(ext, fd, 0);
-        sprintf(pathIMG, "%s/%s.%s", path, name, ext);
-        if (readAndWrite(pathIMG, "wb", 0, fd)) { return 1; }
-    }
-    else if (!strcmp(flag, "0\n")) { return 0; }
-    else { return 1; }
-
-    flag = readToken(flag, fd, 1);
-    if (!strcmp(flag, "\n")){
-        free(flag);
-        return 0;
-    }
-
-    return 1;
-}
-
 void gqu(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE], *topic, *question;
+    char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE], 
+        *topic = NULL, *question = NULL;
 
     topic = readToken(topic, fd, 1);
     if (topic[strlen(topic)-1] == '\n') {
         sendMessageTCP("QGR NOK\n", 8, fd);
+        free(topic);
         return;
     }
 
     question = readToken(question, fd, 1);
     if (question[strlen(question)-1] != '\n') {
         sendMessageTCP("QGR NOK\n", 8, fd);
+        free(topic); free(question);
         return;
     }
-    else { question[strlen(question)-1] = '\0'; }
-
-    printf("STDERR: GQU: %s | %s \n", topic, question);
+    else { 
+        question[strlen(question)-1] = '\0'; 
+    }
 
     if (verifyName(topic) || verifyName(question)) {
         sendMessageTCP("QGR ERR\n", 8, fd);
+        free(topic); free(question);
         return;
     }
 
     sprintf(pathTopic, "topics/%s", topic);
     sprintf(pathQuestion, "topics/%s/%s", topic, question);
 
-    printf("STDERR: Path: %s | Question: %s\n", pathTopic, pathQuestion);
-    if (!checkDir(pathTopic) || !checkDir(pathQuestion)) {
+    if (!checkDir(pathTopic) || !checkDir(pathQuestion) || sendDirInfo(pathQuestion, question, fd, addr, addrlen)) {
         sendMessageTCP("QGR EOF\n", 8, fd);
-        return;
     }
 
-    dirInfo(pathQuestion, question, fd, addr, addrlen);
+    printf("There was a request to send the question: %s of topic: %s\n", question, topic);
+    free(topic); free(question);
 }
-
-
-
-
-
-
-
 
 void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {            //checked
 
-    char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE], *topic, *question, *user;
+    char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE],
+        *topic = NULL, *question = NULL, *user = NULL;
         
     user = readToken(user, fd, 1);
     if (user[strlen(user)-1] == '\n') {
         sendMessageTCP("QUR NOK\n", 8, fd);
+        free(user);
         return;
     }
 
     topic = readToken(topic, fd, 1);
     if (topic[strlen(topic)-1] == '\n') {
         sendMessageTCP("QUR NOK\n", 8, fd);
+        free(topic); free(user); 
         return;
     }
 
     question = readToken(question, fd, 1);
     if (question[strlen(question)-1] == '\n') {
         sendMessageTCP("QUR NOK\n", 8, fd);
+        free(topic); free(user); free(question);
         return;
     }
 
@@ -486,70 +422,78 @@ void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {            //ch
         printf("The user: %s has submitted a question named: %s\n", user, question);
         sendMessageTCP("QUR OK\n", 8, fd);
     }
-}
 
+    free(topic); free(user); free(question);
+}
 
 void ans(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
 
-    char pathQuestion[MAX_PATH_SIZE], pathAnswer[MAX_PATH_SIZE], *topic, *question, *user;
+    char pathQuestion[MAX_PATH_SIZE], pathAnswer[MAX_PATH_SIZE], 
+        *topic = NULL, *question = NULL, *user = NULL;
     int size = 0;
 
     user = readToken(user, fd, 1);
     if (user[strlen(user)-1] == '\n') {
         sendMessageTCP("ANR NOK\n", 8, fd);
+        free(user);
         return;
     }
 
     topic = readToken(topic, fd, 1);
     if (topic[strlen(topic)-1] == '\n') {
         sendMessageTCP("ANR NOK\n", 8, fd);
+        free(topic); free(user); 
         return;
     }
 
     question = readToken(question, fd, 1);
     if (question[strlen(question)-1] == '\n') {
+        free(topic); free(user); free(question);
         sendMessageTCP("ANR NOK\n", 8, fd);
         return;
     }
 
     if (!checkUser(user) || verifyName(topic) || verifyName(question)) {
         sendMessageTCP("ANR NOK\n", 8, fd);
+        free(topic); free(user); free(question);
         return;
     }
 
     sprintf(pathQuestion, "topics/%s/%s", topic, question);
-    size = dirSize(pathQuestion);
-    sprintf(pathAnswer, "topics/%s/%s/%s_%02d", topic, question, question, size + 1);
+    size = dirSize(pathQuestion) + 1;
+    sprintf(pathAnswer, "topics/%s/%s/%s_%02d", topic, question, question, size);
+    sprintf(pathQuestion, "%s_%02d", question, size);
 
     if (size == MAX_TOPICS) {
         sendMessageTCP("ANR FUL\n", 8, fd);
     }
-    else if (saveFolder(fd, user, question, pathAnswer, addr, addrlen)) {
+    else if (saveFolder(fd, user, pathQuestion, pathAnswer, addr, addrlen)) {
         sendMessageTCP("ANR NOK\n", 8, fd);
     }
     else {
         printf("The user: %s has submitted an answer to the question named: %s\n", user, question);
         sendMessageTCP("ANR OK\n", 8, fd);
     }
+
+    free(topic); free(user); free(question);
 }
 
 void handleMessageTCP(int fd) {
 
-    char* message;
     char* token = NULL;
     int result = -1, client;
     struct sockaddr_in addr;
     socklen_t addrlen;
 
     addrlen = sizeof(addr);
-    if ((client = accept(fd, (struct sockaddr*)&addr, &addrlen)) == -1) error(2); //check error code
+    if ((client = accept(fd, (struct sockaddr*)&addr, &addrlen)) == -1) exit(2); //check error code
     
-    message = readToken(message, client, 1);
+    token = readToken(token, client, 1);
 
-    if (message != NULL) {
-        result = checkProtocol(message);
+    if (token != NULL) {
+        result = checkProtocol(token);
     }
-    free(message);
+    free(token);
 
     switch (result) {
         case GQU:
@@ -575,7 +519,7 @@ void handleMessageTCP(int fd) {
 
 void handleMessageUDP(int fd) {
 
-    char* message, *buffer;
+    char* message, *buffer = NULL;
     char* token = NULL;
     int result = -1;
     struct sockaddr_in addr;
@@ -624,14 +568,14 @@ void handleMessageUDP(int fd) {
 int main(int argc, char **argv) {
 
     int option, p = 0, fdUDP, fdTCP, err;
-    char *fsport = PORT, *buffer;
+    char *fsport = PORT;
     fd_set rfds;
     
     while ((option = getopt (argc, argv, "p:")) != -1) {
         switch (option)
         {
         case 'p':
-            if (p) error(1);
+            if (p) exit(1);
             p = 1;
             fsport = optarg;
             break;
@@ -640,7 +584,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (optind < argc) error(1);
+    if (optind < argc) exit(1);
 
     //Initializing topic folder
     if ((stat("topics", &s) == -1) && mkdir("topics", 0777)) {              
@@ -657,40 +601,21 @@ int main(int argc, char **argv) {
     while (1) { 
         /*Mask initialization*/
         FD_ZERO(&rfds);
-        FD_SET(0, &rfds);
         FD_SET(fdUDP, &rfds);
         FD_SET(fdTCP, &rfds);
 
         /*Waits for commands*/
         err = select(max(fdUDP, fdTCP)+1, &rfds, (fd_set*) NULL, (fd_set*) NULL, (struct timeval *)NULL);
-        if (err <= 0) { error(2); }
-
-        /*Reads input from an STDIN  --- DEBUG*/  
-        if (FD_ISSET(0, &rfds)) {
-            char buffer[20] = "";
-            while (buffer[0] != '\n') {
-                read(0, buffer, 1);  
-            };
-            break;
-
-        }
+        if (err <= 0) { exit(2); }
 
         /*Reads input from an UDP connection*/
-        if (FD_ISSET(fdUDP, &rfds)) {
-            handleMessageUDP(fdUDP);
-        }
+        if (FD_ISSET(fdUDP, &rfds)) { handleMessageUDP(fdUDP); }
 
         /*Reads input from an TCP connection*/
-        if (FD_ISSET(fdTCP, &rfds)) {
-            handleMessageTCP(fdTCP);
-        }
+        if (FD_ISSET(fdTCP, &rfds)) { handleMessageTCP(fdTCP); }
     }
 
     close(fdUDP);
     close(fdTCP);
     return 0;
 }
-
-/*
-CHECKAR SE MENSAGENS TERMINAM COM UM \N NO CLIENTE
-*/
