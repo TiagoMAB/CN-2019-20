@@ -142,7 +142,7 @@ char* sendAndReadUDP(int fd, struct addrinfo *res, char* request, char* answer) 
         return buffer;
     }
     else {
-        printf("Server not responding\n"); 
+        printf("Server not responding, aborting request\n"); 
         free(buffer); return NULL;
     }
 }
