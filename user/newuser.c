@@ -30,6 +30,13 @@ enum options {  REGISTER, TOPIC_LIST, TOPIC_PROPOSE, QUESTION_LIST, QUESTION_SUB
 struct addrinfo *resUDP;
 char pidStr[5], user[ID_SIZE], gQuestion[QUESTION_SIZE+1];
 
+/* =============================================================================
+ * deleteDirectory()
+ * - Deletes the directory created by the client to store information locally
+ * obtained from the server
+ * =============================================================================
+ */
+
 void deleteDirectory() {
     char path[5] = "\0"; strcat(path, pidStr);
     char *fileName1, *fileName2;
@@ -74,6 +81,13 @@ void deleteDirectory() {
     rmdir(path);
     closedir(dir1);
 }
+
+/* =============================================================================
+ * checkQuestion(char* token, char** qList, int nQuestions)
+ * - Checks if token is a question saved in the local question list 
+ * - Returns the index the question is in if true, -1 if false;
+ * =============================================================================
+ */
 
 int checkQuestion(char* token, char** qList, int nQuestions) {
 
@@ -622,6 +636,10 @@ int main(int argc, char **argv) {
         fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
         exit(1);
     }
+
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &act, NULL) == -1) exit(1);
 
     sprintf(pidStr, "%d", getpid());
     printf("The folder created to store information is named: %s\n", pidStr);

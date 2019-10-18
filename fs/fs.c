@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <dirent.h>
+#include <signal.h>
 #include <errno.h>
 #include "../util/util.h"
 
@@ -531,6 +532,7 @@ int main(int argc, char **argv) {
     int option, p = 0, fdUDP, fdTCP, err;
     char *fsport = PORT;
     fd_set rfds;
+    struct sigaction act;
     
     while ((option = getopt (argc, argv, "p:")) != -1) {
         switch (option)
@@ -546,6 +548,10 @@ int main(int argc, char **argv) {
     }
 
     if (optind < argc) exit(1);
+    
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &act, NULL) == -1) exit(1);
 
     //Initializing topic folder
     if ((stat("topics", &s) == -1) && mkdir("topics", 0777)) {              
