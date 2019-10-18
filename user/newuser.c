@@ -488,24 +488,25 @@ int sendInfo(int fd, char* request, char* path1, char* path2) {
     int n;
     struct stat st;
 
-    sendMessageTCP(request, strlen(request), fd);             //falta check
+    sendMessageTCP(request, strlen(request), fd);
 
     n = stat(path1, &st);
     if (n) {
         printf("One or more selected files unavailable\n");
         return 0;
     }
-
-    readAndSend(path1, "rb", fd);             //falta check
+    
     if (path2 != NULL) {
-        char *ext, pathCopy[MAX_PATH_SIZE];
-
         n = stat(path2, &st);
         if (n) {
             printf("One or more selected files unavailable\n");
             return 0;
         }
+    }
 
+    readAndSend(path1, "rb", fd);
+    if (path2 != NULL) {
+        char *ext, pathCopy[MAX_PATH_SIZE];
         strcpy(pathCopy, path2);
         strtok(pathCopy, ".");
         ext = strtok(NULL, "");
