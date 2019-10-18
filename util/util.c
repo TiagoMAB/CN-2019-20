@@ -75,7 +75,7 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
     char* size, *end;
     FILE *f;
 
-    f = fopen(path, mode);
+    if ((f = fopen(path, "mode")) == NULL ) { return 1; }
 
     if (nBytes == 0) {
         size = readToken(size, fd, 1);
@@ -126,9 +126,9 @@ char* sendAndReadUDP(int fd, struct addrinfo *res, char* request, char* answer) 
     data = recvfrom(fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT, (struct sockaddr*)&addr, &addrlen);
     while (data == -1 && attempts < 4)  {
         attempts++;
-        sleep(4);
         printf("Server not responding, sending new request\n"); 
-    
+        sleep(4);
+
         n = sendto(fd, request, strlen(request), 0, res->ai_addr, res->ai_addrlen);
         if (n == -1) { 
             printf("There was a problem with UDP connection\n"); exit(1);
@@ -164,7 +164,7 @@ int readAndSend(char* path, char* mode, int fd) {
     int size = 0;
     char *buffer, fileSize[13];  //to see if needs changing
 
-    f = fopen(path, mode);
+    if ((f = fopen(path, "mode")) == NULL ) { return 1; }
 
     fseek(f, 0 , SEEK_END);
     size = ftell(f);

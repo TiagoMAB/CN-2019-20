@@ -75,27 +75,6 @@ void deleteDirectory() {
     closedir(dir1);
 }
 
-void error(int error) {
-    
-    switch (error) {
-    case 1:
-        fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
-        exit(error);
-    
-    case 2:
-        fprintf(stdout, "ERR: Something went wrong with UDP or TCP connection\n");
-        exit(error);
-
-    case 3:
-        fprintf(stdout, "ERR: Message too big, data loss expected\n");
-        exit(error);
-
-    default:
-        break;
-    }
-}
-
-
 int checkQuestion(char* token, char** qList, int nQuestions) {
 
     char* question;
@@ -614,12 +593,18 @@ int main(int argc, char **argv) {
     while ((option = getopt (argc, argv, "n:p:")) != -1) {
         switch (option) {
         case 'n':
-            if (n) error(1);
+            if (n) {
+                fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
+                exit(1);
+            }
             n = 1;
             fsip = optarg;
             break;
         case 'p':
-            if (p) error(1);
+            if (p) {
+                fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
+                exit(1);
+            }
             p = 1;
             fsport = optarg;
             break;
@@ -628,7 +613,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (optind < argc) error(1);
+    if (optind < argc)  {
+        fprintf(stdout, "ERR: Format incorrect. Should be: ./user [-n FSIP] [-p FSport]\n");
+        exit(1);
+    }
 
     sprintf(pidStr, "%d", getpid());
     printf("The folder created to store information is named: %s\n", pidStr);
@@ -640,10 +628,16 @@ int main(int argc, char **argv) {
     hints.ai_flags = AI_PASSIVE|AI_NUMERICSERV;;
 
     s = getaddrinfo(fsip, fsport, &hints, &resUDP);
-    if (s != 0) error(2);
+    if (s != 0)  {
+        fprintf(stdout, "ERR: Something went wrong with UDP or TCP connection\n");
+        exit(1);
+    }
 
     fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol);
-    if (fdUDP == -1) error(2);
+    if (fdUDP == -1)  {
+        fprintf(stdout, "ERR: Something went wrong with UDP or TCP connection\n");
+        exit(1);
+    }
     
     memset(command, '\0', MAX_BUFFER_SIZE);
 
@@ -651,14 +645,10 @@ int main(int argc, char **argv) {
         result = -1;
         printf("Enter command: ");
 
-          // TODO substituir
         fgets(command, MAX_BUFFER_SIZE, stdin);
         token = strtok(command, " \n"); 
 
-        if (token != NULL) {
-            result = checkCommand(token);
-            printf("%d", result);
-        }
+        if (token != NULL) { result = checkCommand(token); }
 
         switch (result) {
             case REGISTER:
