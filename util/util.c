@@ -20,7 +20,7 @@
 #define BUFFER_SIZE 2048
 #define MAX_PATH_SIZE 57
 
-int checkUser(char* id) {   	    //check
+int checkUser(char* id) {   	    //checkED
 
     if (id != NULL && strlen(id) == 5) {
         for (int i = 0; i < 5; i++) {
@@ -33,7 +33,7 @@ int checkUser(char* id) {   	    //check
     return 0;
 }
 
-int dirSize(char* path) {   //VERIFICACOES
+int dirSize(char* path) {       //checked
 
     DIR *d;
     struct dirent *dir;
@@ -46,15 +46,16 @@ int dirSize(char* path) {   //VERIFICACOES
                 size++;                     
             }
         }
-        if (closedir(d)) { printf("There was an error closing a directory\n"); exit(1);}                              //CHAMADA SISTEMA?
+        if (closedir(d)) { printf("There was an error closing a directory\n"); exit(1);}                          
         return size;
     }
     else {
-        return -1;
+        printf("There was an error opening a directory\n"); 
+        exit(1);
     }
 }
 
-int verifyName(char* name) {
+int verifyName(char* name) {        //checked
 
     if (name != NULL && strlen(name) <= 10) {
         for (int i = 0; i < strlen(name); i++) {
@@ -125,7 +126,14 @@ char* sendAndReadUDP(int fd, struct addrinfo *res, char* request, char* answer) 
     data = recvfrom(fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT, (struct sockaddr*)&addr, &addrlen);
     while (data == -1 && attempts < 4)  {
         attempts++;
-        sleep(2);
+        sleep(4);
+        printf("Server not responding, sending new request\n"); 
+    
+        n = sendto(fd, request, strlen(request), 0, res->ai_addr, res->ai_addrlen);
+        if (n == -1) { 
+            printf("There was a problem with UDP connection\n"); exit(1);
+        }
+    
         data = recvfrom(fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT, (struct sockaddr*)&addr, &addrlen);
     }
 
@@ -137,7 +145,6 @@ char* sendAndReadUDP(int fd, struct addrinfo *res, char* request, char* answer) 
         printf("Server not responding\n"); 
         free(buffer); return NULL;
     }
-
 }
 
 int sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen) {
