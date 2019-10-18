@@ -484,27 +484,11 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     return;
 } 
 
-int sendInfo(int fd, char* request, char* path1, char* path2) {
-    int n;
-    struct stat st;
-
-    sendMessageTCP(request, strlen(request), fd);
-
-    n = stat(path1, &st);
-    if (n) {
-        printf("One or more selected files unavailable\n");
-        return 0;
-    }
+void sendInfo(int fd, char* request, char* path1, char* path2) {
     
-    if (path2 != NULL) {
-        n = stat(path2, &st);
-        if (n) {
-            printf("One or more selected files unavailable\n");
-            return 0;
-        }
-    }
+    sendMessageTCP(request, strlen(request), fd);             //falta check
 
-    readAndSend(path1, "rb", fd);
+    readAndSend(path1, "rb", fd);             //falta check
     if (path2 != NULL) {
         char *ext, pathCopy[MAX_PATH_SIZE];
         strcpy(pathCopy, path2);
@@ -519,13 +503,14 @@ int sendInfo(int fd, char* request, char* path1, char* path2) {
     }
 
     sendMessageTCP("\n", 1, fd);
-    return 1;
 }
 
 char** questionSubmit(int fd, int* sQuestion, char* topic, char** qList) {
 
     char* question, *token, *pathIMG = NULL, request[MAX_PATH_SIZE];
     char* path = NULL, *pathText, *answer;
+    struct stat st;
+    int n;
 
     question = strtok(NULL, " \n");
     if (verifyName(question)) {
@@ -544,11 +529,22 @@ char** questionSubmit(int fd, int* sQuestion, char* topic, char** qList) {
     sprintf(request, "QUS %s %s %s", user, topic, question);
 
     pathIMG = strtok(NULL, "\n");
-    
-    if (!sendInfo(fd, request, pathText, pathIMG)) {
-        free(pathText);
+
+    n = stat(pathText, &st);
+    if (n) {
+        printf("One or more selected files unavailable\n");
         return qList;
     }
+
+    if (pathIMG != NULL) {
+        n = stat(pathIMG, &st);
+        if (n) {
+            printf("One or more selected files unavailable\n");
+            return qList;
+        }
+    }
+    
+    sendInfo(fd, request, pathText, pathIMG);
     
     free(pathText);
     
