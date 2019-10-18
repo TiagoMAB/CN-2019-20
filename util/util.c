@@ -107,6 +107,39 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
 }
 
+char* sendAndReadUDP(int fd, struct addrinfo *res, char* request, char* answer) {
+
+    socklen_t addrlen;          
+    struct sockaddr_in addr;
+    int n = 0, data = 0, attempts = 0;
+    char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);
+    
+    n = sendto(fd, request, strlen(request), 0, res->ai_addr, res->ai_addrlen);
+    if (n == -1) { 
+        printf("There was a problem with UDP connection\n"); exit(1);
+    }
+    
+    sleep(1);
+    addrlen = sizeof(addr);
+
+    data = recvfrom(fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT, (struct sockaddr*)&addr, &addrlen);
+    while (data == -1 && attempts < 4)  {
+        attempts++;
+        sleep(2);
+        data = recvfrom(fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT, (struct sockaddr*)&addr, &addrlen);
+    }
+
+    if (data != -1) {
+        buffer[data] = '\0';
+        return buffer;
+    }
+    else {
+        printf("Server not responding\n"); 
+        free(buffer); return NULL;
+    }
+
+}
+
 int sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen) {
 
     int n;
@@ -122,7 +155,7 @@ int readAndSend(char* path, char* mode, int fd) {
 
     FILE *f;
     int size = 0;
-    char *buffer, fileSize[12];  //to see if needs changing
+    char *buffer, fileSize[13];  //to see if needs changing
 
     f = fopen(path, mode);
 
@@ -132,7 +165,7 @@ int readAndSend(char* path, char* mode, int fd) {
 
     if (!strcmp(mode, "rb")) {
         sprintf(fileSize, " %d ", size);
-        if (strlen(fileSize) > 10) { return 1; }
+        if (strlen(fileSize) > 12) { return 1; }
         sendMessageTCP(fileSize, strlen(fileSize), fd);
     } 
 
@@ -160,7 +193,7 @@ int sendMessageTCP(char* buffer, int size, int fd) {            //checked
     return 0;
 }
 
-int saveFolder(int fd, char* user, char* name, char* path) {  
+int saveFolder(int fd, char* user, char* name, char* path) {  //checked
 
     char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
     char *flag = NULL, *ext = NULL;
@@ -172,7 +205,7 @@ int saveFolder(int fd, char* user, char* name, char* path) {
 
     printf("%s\n", pathUID);
     if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
-    fwrite(user, 1, strlen(user), f);                                   //check   
+    fwrite(user, 1, strlen(user), f);                                     
     if (fclose(f) == EOF) { return 1; };      
 
     sprintf(pathTitle, "%s/%s.txt", path, name);
@@ -293,12 +326,19 @@ char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr *addr, socklen_t *
         
         buffer = (char*) malloc(sizeof(char)*size);
         data = recvfrom(fdUDP, buffer, size - 1, MSG_PEEK, addr, addrlen);
+        if (data == -1) {
+            printf("There was a problem with UDP connection\n"); exit(1);
+        }
+
         buffer[size-1] = '\0'; 
     } while (strlen(buffer) == size - 1);
 
     free(buffer);
     buffer = (char*) malloc(sizeof(char)*(data+1));
     data = recvfrom(fdUDP, buffer, data, 0, addr, addrlen);
+    if (data == -1) {
+        printf("There was a problem with UDP connection\n"); exit(1);
+    }
     buffer[data] = '\0';
 
     return buffer;

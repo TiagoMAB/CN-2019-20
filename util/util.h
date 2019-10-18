@@ -29,4 +29,6 @@ int startUDP(char* address, char* port);
 
 int startTCP(char* address, char* port, int flag);
 
+char* sendAndReadUDP(int fd, struct addrinfo *res, char* request, char* answer);
+
 #endif

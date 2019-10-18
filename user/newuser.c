@@ -27,8 +27,6 @@ extern int errno;
 enum options {  REGISTER, TOPIC_LIST, TOPIC_PROPOSE, QUESTION_LIST, QUESTION_SUBMIT, ANSWER_SUBMIT,  
                 TOPIC_SELECT, TS, QUESTION_GET, QG, EXIT };
 
-socklen_t addrlen;          
-struct sockaddr_in addr;
 struct addrinfo *resUDP;
 char pidStr[5], user[ID_SIZE], gQuestion[QUESTION_SIZE+1];
 
@@ -97,6 +95,41 @@ void error(int error) {
     }
 }
 
+
+int checkQuestion(char* token, char** qList, int nQuestions) {
+
+    char* question;
+    for (int i = 0; i < nQuestions; i++) {
+        question = strtok(qList[i], ":");
+        
+        if (!strcmp(token, question)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int sendInfo(int fd, char* request, char* path1, char* path2) {
+    
+    sendMessageTCP(request, strlen(request), fd);             //falta check
+
+    readAndSend(path1, "rb", fd);             //falta check
+    if (path2 != NULL) {
+        char *ext, pathCopy[MAX_PATH_SIZE];
+        strcpy(pathCopy, path2);
+        strtok(pathCopy, ".");
+        ext = strtok(NULL, "");
+        sprintf(pathCopy, " 1 %s", ext);
+        sendMessageTCP(pathCopy, strlen(pathCopy), fd);
+        readAndSend(path2, "rb", fd);
+    }
+    else {
+        sendMessageTCP(" 0", 2, fd);
+    }
+
+    sendMessageTCP("\n", 1, fd);
+}
+
 void freeList(char** list, int listSize) {
     for (int i = 0; i < listSize; i++) {
         free(list[i]);
@@ -105,7 +138,7 @@ void freeList(char** list, int listSize) {
     free(list);
 }
 
-int command_strcmp(char *token) {
+int checkCommand(char *token) {
 
     char *opts[] = {"register", "reg", "topic_list", "tl", "topic_propose", 
                     "tp", "question_list", "ql", "question_submit", "qs", "answer_submit", 
@@ -129,7 +162,7 @@ int command_strcmp(char *token) {
 char* registerID(int fdUDP, char* token) {
 
     int invalid = 0, n = 0;
-    char request[MESSAGE_SIZE] = "", answer[MESSAGE_SIZE] = "";
+    char request[MESSAGE_SIZE] = "", *answer;
 
     // Verifies validity of userID introduced
     token = strtok(NULL, "\n");
@@ -144,15 +177,13 @@ char* registerID(int fdUDP, char* token) {
     if (!invalid) {
         sprintf(request, "REG %s\n", token);
 
-        n = sendto(fdUDP, request, strlen(request), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-        if (n == -1) error(2);
-        
-        addrlen = sizeof(addr);
-        n = recvfrom(fdUDP, answer, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);          //check for cycle and if addr is necessary as it is
-        if (n == -1) error(2);
-
-        if (!strcmp(answer, "RGR OK\n")) {
+        answer = sendAndReadUDP(fdUDP, resUDP, request, answer);
+        if (answer == NULL) {
+            return " ";
+        }
+        else if (!strcmp(answer, "RGR OK\n")) {
             printf("The user has been successfully registered\n");
+            free(answer);
             return token;
         }
         else if (!strcmp(answer, "RGR NOK\n")) {
@@ -160,7 +191,9 @@ char* registerID(int fdUDP, char* token) {
         }
         else { 
             printf("ERR: Incorrect protocol message received\n"); 
+            free(answer); exit(1);
         }
+        free(answer);
         return " ";
     }
 }
@@ -168,28 +201,21 @@ char* registerID(int fdUDP, char* token) {
 char** topicList(int fdUDP, int *nTopics, char** tList) {
 
     int n = 0, i = 0;
-    char answer[MAX_BUFFER_SIZE] = "", *token = NULL;
+    char *answer = NULL, *token = NULL;
 
-    memset(answer, '\0', MAX_BUFFER_SIZE);
-
-    n = sendto(fdUDP, "LTP\n", 4, 0, resUDP->ai_addr, resUDP->ai_addrlen);
-    if (n == -1) error(2);
-    
-    addrlen = sizeof(addr);
-    n = recvfrom(fdUDP, answer, MAX_BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-    if ((n == -1) || (n == MAX_BUFFER_SIZE - 2)) {
-        error(3);                                                //to check
+    answer = sendAndReadUDP(fdUDP, resUDP, "LTP\n", answer);
+    if (answer == NULL) {
+        return tList;
     }
-    answer[n] = '\0';
-
     if (!strcmp(answer, "LTR 0\n")) {
-        printf("No topics are yet available\n");
+        printf("No topics are yet available\n"); free(answer);
         return tList;
     }
 
     token = strtok(answer, " ");
-    if (strcmp(answer, "LTR")) {
-        error(2);
+    if (strcmp(answer, "LTR")) {        
+        printf("ERR: Incorrect protocol message received\n"); 
+        free(answer); exit(1);
     }
 
     if (*nTopics != 0) {
@@ -199,8 +225,8 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
     token = strtok(NULL, " ");
     *nTopics = atoi(token);
     if (*nTopics == 0) {
-        printf("There are no topics available\n");
-        return NULL;
+        printf("There are no topics available\n"); 
+        free(answer); return NULL;
     }
 
     tList = (char**) malloc(sizeof(char*) * (*nTopics));
@@ -216,6 +242,7 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
         printf("%s\n", token);
     }
 
+    free(answer);
     return tList;
 }
 
@@ -270,7 +297,7 @@ int selectTopicN(char* token, char** tList, int nTopics) {
 char** topicPropose(int fdUDP, char* token, int* nTopics, int* sTopic, char** tList) {
 
     int n = 0;
-    char request[MESSAGE_SIZE] = "", answer[MESSAGE_SIZE] = "", topic[TOPIC_SIZE] = "";
+    char request[MESSAGE_SIZE] = "", *answer = NULL, topic[TOPIC_SIZE] = "";
 
     token = strtok(NULL, " \n");
     if ((token == NULL) || (strtok(NULL, "\n") != NULL)) {
@@ -280,12 +307,10 @@ char** topicPropose(int fdUDP, char* token, int* nTopics, int* sTopic, char** tL
 
     sprintf(request, "PTP %s %s\n", user, token);
 
-    n = sendto(fdUDP, request, strlen(request), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-    if (n == -1) error(2);
-    
-    addrlen = sizeof(addr);
-    n = recvfrom(fdUDP, answer, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-    if (n == -1) error(2);
+    answer = sendAndReadUDP(fdUDP, resUDP, request, answer);
+    if (answer == NULL) {
+        return tList;
+    }
 
     if (!strcmp(answer, "PTR OK\n")) {
         printf("Topic \"%s\" successfully proposed\n", token);
@@ -314,38 +339,35 @@ char** topicPropose(int fdUDP, char* token, int* nTopics, int* sTopic, char** tL
     }
     else {
         printf("ERR: Incorrect protocol message received\n"); 
+        free(answer); exit(1);
     }
 
+    free(answer);
     return tList;
 }
 
 char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 
     int n = 0, i = 0;
-    char request[MESSAGE_SIZE] = "", answer[MAX_BUFFER_SIZE] = "", *token = NULL;
+    char request[MESSAGE_SIZE] = "", *answer, *token = NULL;
 
     sprintf(request, "LQU %s\n", topic);
 
-    n = sendto(fdUDP, request, strlen(request), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-    if (n == -1) error(2);
-    
-    addrlen = sizeof(addr);
-    n = recvfrom(fdUDP, answer, MAX_BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
-    if ((n == -1) || (n == MAX_BUFFER_SIZE - 2))  {
-        error(3);                                                           //too check
+    answer = sendAndReadUDP(fdUDP, resUDP, request, answer);
+    if (answer == NULL) {
+        return qList;
     }
-    answer[n] = '\0';
-
-    fprintf(stderr, "%s", answer);                                          // TO REMOVE
 
     if (!strcmp(answer, "LQR 0\n")) {
         printf("No questions titles are yet available\n");
+        free(answer);
         return qList;
     }
 
     token = strtok(answer, " ");
     if (strcmp(answer, "LQR")) {
-        error(2);
+        printf("ERR: Incorrect protocol message received\n"); 
+        free(answer); exit(1);
     } 
 
     if (*nQuestions != 0) {
@@ -355,7 +377,8 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     token = strtok(NULL, " ");
     *nQuestions = atoi(token);
     if (*nQuestions == 0) {
-        error(2);
+        printf("ERR: Incorrect protocol message received\n"); 
+        free(answer); exit(1);
     }
 
     qList = (char**) malloc(sizeof(char*) * (*nQuestions));
@@ -373,21 +396,8 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
         token = strtok(NULL, ":");
         printf("%s answers\n", token);
     }
-    
+    free(answer);
     return qList;
-}
-
-int checkQuestion(char* token, char** qList, int nQuestions) {
-
-    char* question;
-    for (int i = 0; i < nQuestions; i++) {
-        question = strtok(qList[i], ":");
-        
-        if (!strcmp(token, question)) {
-            return i;
-        }
-    }
-    return -1;
 }
 
 void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
@@ -483,27 +493,6 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     printf("Return: %ld\n", index);
     return;
 } 
-
-int sendInfo(int fd, char* request, char* path1, char* path2) {
-    
-    sendMessageTCP(request, strlen(request), fd);             //falta check
-
-    readAndSend(path1, "rb", fd);             //falta check
-    if (path2 != NULL) {
-        char *ext, pathCopy[MAX_PATH_SIZE];
-        strcpy(pathCopy, path2);
-        strtok(pathCopy, ".");
-        ext = strtok(NULL, "");
-        sprintf(pathCopy, " 1 %s", ext);
-        sendMessageTCP(pathCopy, strlen(pathCopy), fd);
-        readAndSend(path2, "rb", fd);
-    }
-    else {
-        sendMessageTCP(" 0", 2, fd);
-    }
-
-    sendMessageTCP("\n", 1, fd);
-}
 
 char** questionSubmit(int fd, char* topic, char** qList) {
 
@@ -667,7 +656,7 @@ int main(int argc, char **argv) {
         token = strtok(command, " \n"); 
 
         if (token != NULL) {
-            result = command_strcmp(token);
+            result = checkCommand(token);
             printf("%d", result);
         }
 
