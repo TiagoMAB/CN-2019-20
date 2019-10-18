@@ -27,7 +27,7 @@ extern int errno;
 enum options {  REGISTER, TOPIC_LIST, TOPIC_PROPOSE, QUESTION_LIST, QUESTION_SUBMIT, ANSWER_SUBMIT,  
                 TOPIC_SELECT, TS, QUESTION_GET, QG, EXIT };
 
-socklen_t addrlen;
+socklen_t addrlen;          
 struct sockaddr_in addr;
 struct addrinfo *resUDP;
 char pidStr[5], user[ID_SIZE], gQuestion[QUESTION_SIZE+1];
@@ -148,7 +148,7 @@ char* registerID(int fdUDP, char* token) {
         if (n == -1) error(2);
         
         addrlen = sizeof(addr);
-        n = recvfrom(fdUDP, answer, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);          //check for cycle
+        n = recvfrom(fdUDP, answer, MESSAGE_SIZE, 0, (struct sockaddr*) &addr, &addrlen);          //check for cycle and if addr is necessary as it is
         if (n == -1) error(2);
 
         if (!strcmp(answer, "RGR OK\n")) {
@@ -505,7 +505,7 @@ int sendInfo(int fd, char* request, char* path1, char* path2) {
     sendMessageTCP("\n", 1, fd);
 }
 
-char** questionSubmit(int fd, int* sQuestion, char* topic, char** qList) {
+char** questionSubmit(int fd, char* topic, char** qList) {
 
     char* question, *token, *pathIMG = NULL, request[MAX_PATH_SIZE];
     char* path = NULL, *pathText, *answer;
@@ -585,7 +585,7 @@ void answerSubmit(int fd, char* topic, char* question) {
     
     answer = readToken(answer, fd, 1);
     if (answer[0] == '\0' || answer[strlen(answer)-1] == '\n' || strcmp(answer, "ANR")) {
-        printf("ERR: An unexpected protocol message was received\n");
+        printf("ERR: An unexpected protocol message was received\n");  //check if needs exit
         free(answer);
         return;
     }
@@ -593,7 +593,7 @@ void answerSubmit(int fd, char* topic, char* question) {
     
     answer = readToken(answer, fd, 1);
     if (answer[0] == '\0') {
-        printf("ERR: An unexpected protocol message was received\n");
+        printf("ERR: An unexpected protocol message was received\n");  //check if needs exit
     }
     else if (!strcmp(answer, "OK\n")) {
         printf("An answer to the question named --%s-- has been successfully registered\n", question);
@@ -605,7 +605,7 @@ void answerSubmit(int fd, char* topic, char* question) {
         printf("It was not possible to register this question\n");
     } 
     else {
-        printf("ERR: An unexpected protocol message was received\n");
+        printf("ERR: An unexpected protocol message was received\n");  //check if needs exit
     }
 
     free(answer);
@@ -616,7 +616,6 @@ void answerSubmit(int fd, char* topic, char* question) {
 int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1;
-    int sQuestion = -1;
     char *fsip = "localhost", *fsport = PORT, command[MAX_BUFFER_SIZE] = "", *token = NULL;
     int result = -1, pid;
     ssize_t s;
@@ -642,9 +641,8 @@ int main(int argc, char **argv) {
 
     if (optind < argc) error(1);
 
-    pid = getpid();
-    sprintf(pidStr, "%d", pid);
-    printf("%s", pidStr);
+    sprintf(pidStr, "%d", getpid());
+    printf("The folder created to store information is named: %s\n", pidStr);
     mkdir(pidStr, 0777);
 
     memset(&hints, 0, sizeof hints);
@@ -707,7 +705,7 @@ int main(int argc, char **argv) {
                     freeList(qList, nQuestions);
                     qList = NULL;
                     nQuestions = 0;
-                    sQuestion = -1;
+                    strcpy(gQuestion, "");       //may be a source of errors
                 }
 
                 break;
@@ -724,7 +722,7 @@ int main(int argc, char **argv) {
                     freeList(qList, nQuestions);
                     qList = NULL;
                     nQuestions = 0;
-                    sQuestion = -1;
+                    strcpy(gQuestion, "");        //may be a source of errors
                 }
                 
                 break;
@@ -760,7 +758,9 @@ int main(int argc, char **argv) {
                     printf("ERR: Missing information. No topic or question has been selected\n");
                 }
                 else {
-                    if ((fdTCP = startTCP(fsip, fsport, 0)) == -1) { exit(1); }  
+                    if ((fdTCP = startTCP(fsip, fsport, 0)) == -1) { 
+                        printf("There was an error while establishing TCP connection"); exit(1); 
+                    }   
 
                     if (result == QUESTION_GET)
                         questionGet(fdTCP, 1, nQuestions, tList[sTopic], qList);
@@ -780,9 +780,10 @@ int main(int argc, char **argv) {
                     printf("ERR: Missing information. No topic has been selected\n");
                 }
                 else {
-                    if ((fdTCP = startTCP(fsip, fsport, 0)) == -1) { exit(1); }  
-
-                    qList = questionSubmit(fdTCP, &sQuestion, tList[sTopic], qList);
+                    if ((fdTCP = startTCP(fsip, fsport, 0)) == -1) { 
+                        printf("There was an error while establishing TCP connection"); exit(1); 
+                    }   
+                    qList = questionSubmit(fdTCP, tList[sTopic], qList);
 
                     close(fdTCP);
                 }
@@ -797,9 +798,10 @@ int main(int argc, char **argv) {
                     printf("ERR: Missing information. No topic or question has been selected\n");
                 }
                 else {
-                    if ((fdTCP = startTCP(fsip, fsport, 0)) == -1) { exit(1); }      //check is needs a message to show to user
+                    if ((fdTCP = startTCP(fsip, fsport, 0)) == -1) { 
+                        printf("There was an error while establishing TCP connection"); exit(1); 
+                    }      
 
-                    printf("|%s|\n", gQuestion);
                     answerSubmit(fdTCP, tList[sTopic], gQuestion);
                     close(fdTCP);
                 }

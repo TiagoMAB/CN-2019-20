@@ -20,7 +20,7 @@
 #define BUFFER_SIZE 2048
 #define MAX_PATH_SIZE 57
 
-int checkUser(char* id) {
+int checkUser(char* id) {   	    //check
 
     if (id != NULL && strlen(id) == 5) {
         for (int i = 0; i < 5; i++) {
@@ -43,10 +43,10 @@ int dirSize(char* path) {   //VERIFICACOES
     if (d) {
         while ((dir = readdir(d)) != NULL) {
             if ((dir->d_type == DT_DIR) && strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
-                size++;                     //CHAMADA SISTEMA?
+                size++;                     
             }
         }
-        closedir(d);                                //CHAMADA SISTEMA?
+        if (closedir(d)) { printf("There was an error closing a directory\n"); exit(1);}                              //CHAMADA SISTEMA?
         return size;
     }
     else {
@@ -67,24 +67,6 @@ int verifyName(char* name) {
     return 1; 
 }
 
-char* readToken(char* answer, int fdTCP, int flag) {
-
-    int readBytes = 0, size = 2;
-    char buffer[2] = "";
-    answer = (char*) malloc(sizeof(char)*size);
-    memset(answer, '\0', size);
-
-    while (readBytes = read(fdTCP, buffer, 1) && buffer[0] != ' ' && (buffer[0] != '\n' || flag)) {     //check for 
-        buffer[1] = '\0';
-        size++;
-        answer = (char*) realloc(answer, sizeof(char)*size);
-        strcat(answer, buffer);
-        if (flag && buffer[0] == '\n') { return answer; }
-    }
-
-    return answer;
-}
-
 int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
     int readBytes = 0;
@@ -96,10 +78,12 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
     if (nBytes == 0) {
         size = readToken(size, fd, 1);
-        if (size[0] == '\0' || (size[strlen(size)-1] == '\n') || strlen(size) > 10) { 
+        if (size[0] == '\0' || (size[strlen(size)-1] == '\n') || strlen(size) > 10) {
+            free(size); 
             return 1; 
         }
         if (!(nBytes = strtol(size, &end, 10)) || end[0] != '\0') {
+            free(size);
             return 1;
         } 
     }
@@ -123,31 +107,6 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
 }
 
-
-char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr *addr, socklen_t *addrlen) {
-
-    int size = 4, data = 4;
-
-    buffer = (char*) malloc(sizeof(char)*size);
-    *addrlen = sizeof(addr);
-
-    do {
-        free(buffer);
-        size *= 2;
-        
-        buffer = (char*) malloc(sizeof(char)*size);
-        data = recvfrom(fdUDP, buffer, size - 1, MSG_PEEK, addr, addrlen);
-        buffer[size-1] = '\0'; 
-    } while (strlen(buffer) == size - 1);
-
-    free(buffer);
-    buffer = (char*) malloc(sizeof(char)*(data+1));
-    data = recvfrom(fdUDP, buffer, data, 0, addr, addrlen);
-    buffer[data] = '\0';
-
-    return buffer;
-}
-
 int sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen) {
 
     int n;
@@ -158,7 +117,6 @@ int sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t a
 
     return 0;
 }
-
 
 int readAndSend(char* path, char* mode, int fd) {
 
@@ -190,29 +148,31 @@ int readAndSend(char* path, char* mode, int fd) {
     return 0;
 }
 
-int sendMessageTCP(char* buffer, int size, int fdTCP) {             //FALTA ALTERAR
-
+int sendMessageTCP(char* buffer, int size, int fd) {            //checked
+    
     int n;
-    printf("%s", buffer);
-    n = write(fdTCP, buffer, size);
-    if (n == -1) { return 1; }
 
+    while (size > 0) {
+        n = write(fd, buffer, size);
+        if (n == -1) { return 1; }
+        size -= n;
+    }
     return 0;
 }
 
-int saveFolder(int fd, char* user, char* name, char* path) {  //checked
+int saveFolder(int fd, char* user, char* name, char* path) {  
 
     char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
     char *flag = NULL, *ext = NULL;
     FILE *f;
 
-    mkdir(path, 0777);
+    if (mkdir(path, 0777) == -1) { return 1; }
 
     sprintf(pathUID, "%s/%s_UID.txt", path, name);
 
     printf("%s\n", pathUID);
     if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
-    fwrite(user, 1, strlen(user), f);                   //check
+    fwrite(user, 1, strlen(user), f);                                   //check   
     if (fclose(f) == EOF) { return 1; };      
 
     sprintf(pathTitle, "%s/%s.txt", path, name);
@@ -245,9 +205,7 @@ int saveFolder(int fd, char* user, char* name, char* path) {  //checked
     return 1;
 }
 
-
-
-int startUDP(char* address, char* port) {
+int startUDP(char* address, char* port) {   //checked
 
     int fd, err;
     struct addrinfo hints, *res;
@@ -259,15 +217,15 @@ int startUDP(char* address, char* port) {
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE|AI_NUMERICSERV;
 
-    if ((err = getaddrinfo(address, port, &hints, &res)) != 0) exit(2);          //exit
-    if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) exit(2);  //exit
-    if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) exit(2);  //exit
+    if ((err = getaddrinfo(address, port, &hints, &res)) != 0) { return -1; }   
+    if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) { return -1; }  
+    if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) { return -1; }  
     
     freeaddrinfo(res);
     return fd;
 }
 
-int startTCP(char* address, char* port, int flag) {
+int startTCP(char* address, char* port, int flag) {     //checked
 
     int fd, err;
     struct addrinfo hints, *res;
@@ -279,35 +237,35 @@ int startTCP(char* address, char* port, int flag) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE|AI_NUMERICSERV;
 
-    if ((err = getaddrinfo(address, port, &hints, &res)) != 0) exit(2);     //exit
-    if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) exit(2);       //exit
+    if ((err = getaddrinfo(address, port, &hints, &res)) != 0) { exit(1); }  
+    if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) { exit(1);; }      
     
     if (flag) {
-        if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) exit(2);     //exit
-        if (listen(fd, 5) == -1) exit(2);       //exit
+        if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) { exit(1); }   
+        if (listen(fd, 5) == -1) { exit(1); }      
     }
     else {
-        if (connect(fd, res->ai_addr, res->ai_addrlen) == -1) { return -1; }  
+        if (connect(fd, res->ai_addr, res->ai_addrlen) == -1) { exit(1); }  
     }
 
     freeaddrinfo(res);
     return fd;
 }
 
-int checkDir(char* path) {
+int checkDir(char* path) { //checked
 
     DIR *d;
 
     d = opendir(path);
     if (d) { 
-        closedir(d); 
+        if (closedir(d)) { printf("There was an error closing a directory\n"); exit(1);}
         return 1; 
     }
     else if (ENOENT == errno) { return 0;}
-    else { exit(1); } //CHECK
+    else { return 1; } 
 }
 
-int readAndSave(int fd, char* path, char* question) {
+int readAndSave(int fd, char* path, char* question) {       //checked
 
     char *id = readToken(id, fd, 1), ret = 0;
 
@@ -320,4 +278,46 @@ int readAndSave(int fd, char* path, char* question) {
 
     free(id);
     return ret;
+}
+
+char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr *addr, socklen_t *addrlen) {
+
+    int size = 4, data = 4;
+
+    buffer = (char*) malloc(sizeof(char)*size);
+    *addrlen = sizeof(addr);
+
+    do {
+        free(buffer);
+        size *= 2;
+        
+        buffer = (char*) malloc(sizeof(char)*size);
+        data = recvfrom(fdUDP, buffer, size - 1, MSG_PEEK, addr, addrlen);
+        buffer[size-1] = '\0'; 
+    } while (strlen(buffer) == size - 1);
+
+    free(buffer);
+    buffer = (char*) malloc(sizeof(char)*(data+1));
+    data = recvfrom(fdUDP, buffer, data, 0, addr, addrlen);
+    buffer[data] = '\0';
+
+    return buffer;
+}
+
+char* readToken(char* answer, int fdTCP, int flag) {
+
+    int readBytes = 0, size = 2;
+    char buffer[2] = "";
+    answer = (char*) malloc(sizeof(char)*size);
+    memset(answer, '\0', size);
+
+    while (readBytes = read(fdTCP, buffer, 1) && buffer[0] != ' ' && (buffer[0] != '\n' || flag)) {     //check for 
+        buffer[1] = '\0';
+        size++;
+        answer = (char*) realloc(answer, sizeof(char)*size);
+        strcat(answer, buffer);
+        if (flag && buffer[0] == '\n') { return answer; }
+    }
+
+    return answer;
 }
