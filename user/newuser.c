@@ -90,23 +90,26 @@ int checkQuestion(char* token, char** qList, int nQuestions) {
 
 int sendInfo(int fd, char* request, char* path1, char* path2) {
     
-    sendMessageTCP(request, strlen(request), fd);             //falta check
+    if (sendMessageTCP(request, strlen(request), fd)) { return 1; }            
 
-    readAndSend(path1, "rb", fd);             //falta check
+    if (readAndSend(path1, "rb", fd)) { return 1; }     
+
     if (path2 != NULL) {
         char *ext, pathCopy[MAX_PATH_SIZE];
         strcpy(pathCopy, path2);
         strtok(pathCopy, ".");
         ext = strtok(NULL, "");
         sprintf(pathCopy, " 1 %s", ext);
-        sendMessageTCP(pathCopy, strlen(pathCopy), fd);
-        readAndSend(path2, "rb", fd);
+        
+        if (sendMessageTCP(pathCopy, strlen(pathCopy), fd)) { return 1; }   
+        if (readAndSend(path2, "rb", fd)) { return 1; }   
     }
     else {
-        sendMessageTCP(" 0", 2, fd);
+        if (sendMessageTCP(" 0", 2, fd)) { return 1; }   
     }
 
-    sendMessageTCP("\n", 1, fd);
+    if (sendMessageTCP("\n", 1, fd)) { return 1; }   
+    return 0;
 }
 
 void freeList(char** list, int listSize) {
@@ -404,7 +407,7 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     }
     else {
         index = strtol(token, &end, 10) - 1;
-        if (end[0] != '\0' || index < 0 || index > nQuestions) { 
+        if (end[0] != '\0' || index < 0 || index + 1 > nQuestions) { 
             printf("ERR: Format incorrect. Should be: \"qg number\" with number being a positive integer between 1 and 99\n");
             return;
         }
@@ -412,7 +415,6 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     }
 
     sprintf(request, "GQU %s %s\n", topic, question);
-    printf("GQU %s %s\n", topic, question);
     sendMessageTCP(request, strlen(request), fd);
 
     message = readToken(message, fd, 1);
@@ -437,11 +439,13 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
         exit(1);
     }
     else if (N[strlen(N)-1] == '\n') {
-        printf("Question succesfully downloaded\n");
+        printf("Question - %s - succesfully downloaded\n", question);
         free(N);
         strcpy(gQuestion, question);
         return;
     }
+
+    printf("Question - %s - succesfully downloaded\n", question);
 
     s = strtol(N, &end, 10);
     if (end[0] != '\0' || s < 0 || s > 10) { 
@@ -470,8 +474,6 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     }
 
     strcpy(gQuestion, question);
-    printf("Return: %ld\n", index);
-    return;
 } 
 
 char** questionSubmit(int fd, char* topic, char** qList) {
@@ -497,11 +499,15 @@ char** questionSubmit(int fd, char* topic, char** qList) {
 
     pathIMG = strtok(NULL, "\n");
     
-    sendInfo(fd, request, pathText, pathIMG);
+    if (sendInfo(fd, request, pathText, pathIMG)) {
+        printf("ERR: Something went wrong while sending files\n");
+        return qList;
+    }
     
     free(pathText);
     
     answer = readToken(answer, fd, 1);
+    printf("-%s-\n", answer);
     if (answer[0] == '\0' || answer[strlen(answer)-1] == '\n' || strcmp(answer, "QUR")) {
         printf("ERR: An unexpected protocol message was received\n");
         free(answer);
@@ -510,6 +516,7 @@ char** questionSubmit(int fd, char* topic, char** qList) {
     free(answer);
     
     answer = readToken(answer, fd, 1);
+    printf("-%s-\n", answer);
     if (answer[0] == '\0') {
         printf("ERR: An unexpected protocol message was received\n");
         exit(1);
@@ -552,7 +559,10 @@ void answerSubmit(int fd, char* topic, char* question) {
 
     pathIMG = strtok(NULL, "\n");
     
-    sendInfo(fd, request, pathText, pathIMG);
+    if (sendInfo(fd, request, pathText, pathIMG)) {
+        printf("ERR: Something went wrong while sending files\n");
+        return;
+    }
     
     answer = readToken(answer, fd, 1);
     if (answer[0] == '\0' || answer[strlen(answer)-1] == '\n' || strcmp(answer, "ANR")) {
@@ -731,7 +741,6 @@ int main(int argc, char **argv) {
                 }
                 else { 
                     qList = questionList(fdUDP, &nQuestions, tList[sTopic], qList);
-                    printf("%d\n", nQuestions);
                 }
 
                 break;

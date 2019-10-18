@@ -91,19 +91,20 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
     while (nBytes > BUFFER_SIZE) {
         readBytes = read(fd, buffer, BUFFER_SIZE);
-        if (readBytes == 0) { return 1;}
+        if (readBytes == -1) { return 1;}
         nBytes -= readBytes;
         fwrite(buffer, readBytes, 1, f);
     } 
     
     while (nBytes > 0) {
         readBytes = read(fd, buffer, nBytes);             //CHECK
-        if (readBytes == 0) { return 1;}
+        if (readBytes == -1) { return 1;}
         nBytes -= readBytes;
         fwrite(buffer, readBytes, 1, f);
     }
+
     free(size);
-    if (fclose(f) == EOF) { return 1; }; 
+    if (fclose(f) == EOF) { return 1; }
     return 0;
 
 }
@@ -161,8 +162,8 @@ int sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t a
 int readAndSend(char* path, char* mode, int fd) {
 
     FILE *f;
-    int size = 0;
-    char *buffer, fileSize[13];  //to see if needs changing
+    long size = 0, readBytes = 0;
+    char buffer[BUFFER_SIZE], fileSize[13];  //to see if needs changing
 
     if ((f = fopen(path, mode)) == NULL ) { return 1; }
 
@@ -171,20 +172,28 @@ int readAndSend(char* path, char* mode, int fd) {
     fseek(f, 0 , SEEK_SET);
 
     if (!strcmp(mode, "rb")) {
-        sprintf(fileSize, " %d ", size);
+        sprintf(fileSize, " %ld ", size);
         if (strlen(fileSize) > 12) { return 1; }
         sendMessageTCP(fileSize, strlen(fileSize), fd);
     } 
 
-    buffer = (char*) malloc(sizeof(char)*(size+1)); 
-    if (fread(buffer, size, 1, f) == -1) exit(2); //check error
-    buffer[size] = '\0';
+    while (size > BUFFER_SIZE) {
+        readBytes = fread(buffer, 1, BUFFER_SIZE, f);
+        if (readBytes == -1) { return 1; }
+        size -= readBytes;
+        readBytes = write(fd, buffer, readBytes);
+        if (readBytes == -1) { return 1; }
+    } 
     
-    if (fclose(f) == EOF) { return 1; }; 
-
-    sendMessageTCP(buffer, size, fd);
-    free(buffer);
-
+    while (size > 0) {
+        readBytes = fread(buffer, 1, size, f);
+        if (readBytes == -1) { return 1; }
+        size -= readBytes;
+        readBytes = write(fd, buffer, readBytes);
+        if (readBytes == -1) { return 1; }
+    }
+    
+    if (fclose(f) == EOF) { return 1; }
     return 0;
 }
 
@@ -210,12 +219,10 @@ int saveFolder(int fd, char* user, char* name, char* path) {  //checked
 
     sprintf(pathUID, "%s/%s_UID.txt", path, name);
 
-    printf("%s\n", pathUID);
     if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
     fwrite(user, 1, strlen(user), f);                                     
     if (fclose(f) == EOF) { return 1; };      
 
-     printf("%s\n", pathTitle);
     sprintf(pathTitle, "%s/%s.txt", path, name);
     if (readAndWrite(pathTitle, "w", 0, fd)) { return 1; }
 
