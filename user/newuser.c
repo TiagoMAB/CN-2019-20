@@ -181,16 +181,12 @@ char* registerID(int fdUDP, char* token) {
     int invalid = 0, n = 0;
     char request[MESSAGE_SIZE] = "", *answer;
 
-    // Verifies validity of userID introduced
     token = strtok(NULL, "\n");
     if (!checkUser(token)) {
         printf("ERR: Format incorrect\n");
         return " ";
     }
 
-    // If userID is valid, sends the information to the server with the format "REG USERID" 
-    // and waits a response from it. If the response is "RGR OK", the user is registered
-    // If "RGR NOK" is received, it was not possible to register user
     if (!invalid) {
         sprintf(request, "REG %s\n", token);
 
@@ -336,7 +332,7 @@ char** topicPropose(int fdUDP, char* token, int* nTopics, int* sTopic, char** tL
         *sTopic = *nTopics;
         (*nTopics)++;
         if (tList == NULL) {
-            tList = (char**) malloc(sizeof(char*));                             //needs checking
+            tList = (char**) malloc(sizeof(char*));
         }
         else {
             tList = (char**) realloc(tList, sizeof(char*) * (*nTopics));
@@ -738,7 +734,7 @@ int main(int argc, char **argv) {
                     freeList(qList, nQuestions);
                     qList = NULL;
                     nQuestions = 0;
-                    strcpy(gQuestion, "");       //may be a source of errors
+                    strcpy(gQuestion, "");
                 }
 
                 break;
@@ -755,7 +751,7 @@ int main(int argc, char **argv) {
                     freeList(qList, nQuestions);
                     qList = NULL;
                     nQuestions = 0;
-                    strcpy(gQuestion, "");        //may be a source of errors
+                    strcpy(gQuestion, "");
                 }
                 
                 break;
