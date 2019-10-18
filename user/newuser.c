@@ -387,7 +387,7 @@ int checkQuestion(char* token, char** qList, int nQuestions) {
             return i;
         }
     }
-    return 0;
+    return -1;
 }
 
 void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
@@ -407,7 +407,7 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
             printf("ERR: Incorrect format.\n");
             return;
         }
-        else if ((index = checkQuestion(token, qList, nQuestions)) == 0) {
+        else if ((index = checkQuestion(token, qList, nQuestions)) == -1) {
             printf("ERR: No such question\n");
             return;
         }
@@ -425,7 +425,7 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     sprintf(request, "GQU %s %s\n", topic, question);
     sendMessageTCP(request, strlen(request), fd);
 
-    message = readToken(id, fd, 1);
+    message = readToken(message, fd, 1);
     if (message[0] == '\0' || message[strlen(message)-1] == '\n' || strcmp(message, "QGR")) {
         printf("ERR: An unexpected protocol message was received\n");
         free(message);
@@ -484,7 +484,7 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     return;
 } 
 
-void sendInfo(int fd, char* request, char* path1, char* path2) {
+int sendInfo(int fd, char* request, char* path1, char* path2) {
     
     sendMessageTCP(request, strlen(request), fd);             //falta check
 
@@ -509,8 +509,6 @@ char** questionSubmit(int fd, char* topic, char** qList) {
 
     char* question, *token, *pathIMG = NULL, request[MAX_PATH_SIZE];
     char* path = NULL, *pathText, *answer;
-    struct stat st;
-    int n;
 
     question = strtok(NULL, " \n");
     if (verifyName(question)) {
@@ -529,22 +527,6 @@ char** questionSubmit(int fd, char* topic, char** qList) {
     sprintf(request, "QUS %s %s %s", user, topic, question);
 
     pathIMG = strtok(NULL, "\n");
-
-    n = stat(pathText, &st);
-    if (n) {
-        printf("One or more selected files unavailable\n");
-        free(pathText);
-        return qList;
-    }
-
-    if (pathIMG != NULL) {
-        n = stat(pathIMG, &st);
-        if (n) {
-            printf("One or more selected files unavailable\n");
-            free(pathText);
-            return qList;
-        }
-    }
     
     sendInfo(fd, request, pathText, pathIMG);
     

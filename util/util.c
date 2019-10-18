@@ -166,7 +166,7 @@ int saveFolder(int fd, char* user, char* name, char* path) {
     char *flag = NULL, *ext = NULL;
     FILE *f;
 
-    if (mkdir(path, 0777) == -1) { return 1; }
+    if (mkdir(path, 0777) == -1 && errno != EEXIST) { return 1; }
 
     sprintf(pathUID, "%s/%s_UID.txt", path, name);
 
