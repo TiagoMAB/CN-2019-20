@@ -485,12 +485,27 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
 } 
 
 int sendInfo(int fd, char* request, char* path1, char* path2) {
-    
+    int n;
+    struct stat st;
+
     sendMessageTCP(request, strlen(request), fd);             //falta check
+
+    n = stat(path1, &st);
+    if (n) {
+        printf("One or more selected files unavailable\n");
+        return 0;
+    }
 
     readAndSend(path1, "rb", fd);             //falta check
     if (path2 != NULL) {
         char *ext, pathCopy[MAX_PATH_SIZE];
+
+        n = stat(path2, &st);
+        if (n) {
+            printf("One or more selected files unavailable\n");
+            return 0;
+        }
+
         strcpy(pathCopy, path2);
         strtok(pathCopy, ".");
         ext = strtok(NULL, "");
@@ -503,6 +518,7 @@ int sendInfo(int fd, char* request, char* path1, char* path2) {
     }
 
     sendMessageTCP("\n", 1, fd);
+    return 1;
 }
 
 char** questionSubmit(int fd, int* sQuestion, char* topic, char** qList) {
@@ -528,7 +544,10 @@ char** questionSubmit(int fd, int* sQuestion, char* topic, char** qList) {
 
     pathIMG = strtok(NULL, "\n");
     
-    sendInfo(fd, request, pathText, pathIMG);
+    if (!sendInfo(fd, request, pathText, pathIMG)) {
+        free(pathText);
+        return qList;
+    }
     
     free(pathText);
     
