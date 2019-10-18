@@ -102,6 +102,14 @@ int checkQuestion(char* token, char** qList, int nQuestions) {
     return -1;
 }
 
+/* =============================================================================
+ * sendInfo(int fd, char* request, char* path1, char* path2)
+ * - Sends text and image files through TCP to the server (used for submit
+ *   commands)
+ * - Returns 0 if successful, 1 if not;
+ * =============================================================================
+ */
+
 int sendInfo(int fd, char* request, char* path1, char* path2) {
     
     if (sendMessageTCP(request, strlen(request), fd)) { return 1; }            
@@ -126,6 +134,13 @@ int sendInfo(int fd, char* request, char* path1, char* path2) {
     return 0;
 }
 
+/* =============================================================================
+ * freeList(char** list, int listSize)
+ * - Frees a list of lists, used to free either the local question list or the
+ *   local topic list
+ * =============================================================================
+ */
+
 void freeList(char** list, int listSize) {
     for (int i = 0; i < listSize; i++) {
         free(list[i]);
@@ -133,6 +148,12 @@ void freeList(char** list, int listSize) {
 
     free(list);
 }
+
+/* =============================================================================
+ * checkCommand(char* token)
+ * - checks if token corresponds to one of the commands in opts
+ * =============================================================================
+ */
 
 int checkCommand(char *token) {
 
