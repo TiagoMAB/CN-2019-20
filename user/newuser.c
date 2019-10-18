@@ -533,6 +533,7 @@ char** questionSubmit(int fd, int* sQuestion, char* topic, char** qList) {
     n = stat(pathText, &st);
     if (n) {
         printf("One or more selected files unavailable\n");
+        free(pathText);
         return qList;
     }
 
@@ -540,6 +541,7 @@ char** questionSubmit(int fd, int* sQuestion, char* topic, char** qList) {
         n = stat(pathIMG, &st);
         if (n) {
             printf("One or more selected files unavailable\n");
+            free(pathText);
             return qList;
         }
     }
