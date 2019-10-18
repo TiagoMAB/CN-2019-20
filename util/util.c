@@ -75,7 +75,7 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
     char* size, *end;
     FILE *f;
 
-    if ((f = fopen(path, "mode")) == NULL ) { return 1; }
+    if ((f = fopen(path, mode)) == NULL ) { return 1; }
 
     if (nBytes == 0) {
         size = readToken(size, fd, 1);
@@ -103,7 +103,7 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
         fwrite(buffer, readBytes, 1, f);
     }
     free(size);
-    fclose(f);
+    if (fclose(f) == EOF) { return 1; }; 
     return 0;
 
 }
@@ -164,7 +164,7 @@ int readAndSend(char* path, char* mode, int fd) {
     int size = 0;
     char *buffer, fileSize[13];  //to see if needs changing
 
-    if ((f = fopen(path, "mode")) == NULL ) { return 1; }
+    if ((f = fopen(path, mode)) == NULL ) { return 1; }
 
     fseek(f, 0 , SEEK_END);
     size = ftell(f);
@@ -180,7 +180,7 @@ int readAndSend(char* path, char* mode, int fd) {
     if (fread(buffer, size, 1, f) == -1) exit(2); //check error
     buffer[size] = '\0';
     
-    fclose(f);
+    if (fclose(f) == EOF) { return 1; }; 
 
     sendMessageTCP(buffer, size, fd);
     free(buffer);
@@ -215,6 +215,7 @@ int saveFolder(int fd, char* user, char* name, char* path) {  //checked
     fwrite(user, 1, strlen(user), f);                                     
     if (fclose(f) == EOF) { return 1; };      
 
+     printf("%s\n", pathTitle);
     sprintf(pathTitle, "%s/%s.txt", path, name);
     if (readAndWrite(pathTitle, "w", 0, fd)) { return 1; }
 

@@ -169,7 +169,7 @@ char* registerID(int fdUDP, char* token) {
             printf("ERR: Impossible to register user \"%s\" \n", token); 
         }
         else { 
-            printf("ERR: Incorrect protocol message received\n"); 
+            printf("ERR: An unexpected protocol message was received\n");
             free(answer); exit(1);
         }
         free(answer);
@@ -193,7 +193,7 @@ char** topicList(int fdUDP, int *nTopics, char** tList) {
 
     token = strtok(answer, " ");
     if (strcmp(answer, "LTR")) {        
-        printf("ERR: Incorrect protocol message received\n"); 
+        printf("ERR: An unexpected protocol message was received\n");
         free(answer); exit(1);
     }
 
@@ -317,7 +317,7 @@ char** topicPropose(int fdUDP, char* token, int* nTopics, int* sTopic, char** tL
         printf("Proposal of topic \"%s\" was unnsuccesful\n", token);
     }
     else {
-        printf("ERR: Incorrect protocol message received\n"); 
+        printf("ERR: An unexpected protocol message was received\n");
         free(answer); exit(1);
     }
 
@@ -345,7 +345,7 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 
     token = strtok(answer, " ");
     if (strcmp(answer, "LQR")) {
-        printf("ERR: Incorrect protocol message received\n"); 
+        printf("ERR: An unexpected protocol message was received\n");
         free(answer); exit(1);
     } 
 
@@ -356,7 +356,7 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     token = strtok(NULL, " ");
     *nQuestions = atoi(token);
     if (*nQuestions == 0) {
-        printf("ERR: Incorrect protocol message received\n"); 
+        printf("ERR: An unexpected protocol message was received\n");
         free(answer); exit(1);
     }
 
@@ -387,13 +387,13 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
 
     token = strtok(NULL, " \n");
     if ((token == NULL) || (strtok(NULL, "\n") != NULL)) {
-        printf("ERR: Format incorrect. Should be: \"topic_select topic\" with topic being a non-empty string\n");
+        printf("ERR: Format incorrect. Should be: \"question_get topic\" or \"qg number\" \n");
         return;
     }
 
     if (flag) {
         if (verifyName(token)) {
-            printf("ERR: Incorrect format.\n");
+            printf("ERR: Format incorrect. Should be: \"question_get topic\" with topic being a non-empty string\n");
             return;
         }
         else if ((index = checkQuestion(token, qList, nQuestions)) == -1) {
@@ -405,20 +405,21 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     else {
         index = strtol(token, &end, 10) - 1;
         if (end[0] != '\0' || index < 0 || index > nQuestions) { 
-            printf("ERR: Format incorrect or no such question\n");
+            printf("ERR: Format incorrect. Should be: \"qg number\" with number being a positive integer between 1 and 99\n");
             return;
         }
         question = qList[index];
     }
 
     sprintf(request, "GQU %s %s\n", topic, question);
+    printf("GQU %s %s\n", topic, question);
     sendMessageTCP(request, strlen(request), fd);
 
     message = readToken(message, fd, 1);
     if (message[0] == '\0' || message[strlen(message)-1] == '\n' || strcmp(message, "QGR")) {
         printf("ERR: An unexpected protocol message was received\n");
         free(message);
-        return;
+        exit(1);
     }
     free(message);
 
@@ -426,14 +427,14 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     
     if (readAndSave(fd, path, question) != 2) {
         printf("ERR: An unexpected protocol message was received\n");
-        return;
+        exit(1);
     }
 
     N = readToken(N, fd, 1);
     if (N[0] == '\0') {
         printf("ERR: An unexpected protocol message was received\n");
         free(N);
-        return;
+        exit(1);
     }
     else if (N[strlen(N)-1] == '\n') {
         printf("Question succesfully downloaded\n");
@@ -446,7 +447,7 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
     if (end[0] != '\0' || s < 0 || s > 10) { 
         printf("ERR: An unexpected protocol message was received\n");
         free(N);
-        return;
+        exit(1);
     }
     free(N);
 
@@ -455,14 +456,14 @@ void questionGet(int fd, int flag, int nQuestions, char* topic, char** qList) {
         if (AN[0] == '\0' || AN[strlen(AN)-1] == '\n') {
             printf("ERR: An unexpected protocol message was received\n");
             free(AN);
-            return;
+            exit(1);
         }
         sprintf(answer, "%s_%s", question, AN);
 
         if (readAndSave(fd, path, answer) == 1) {
             printf("ERR: An unexpected protocol message was received\n");
             free(AN);
-            return;
+            exit(1);
         }
         printf("Answer %s succesfully downloaded\n", AN);
         free(AN);
@@ -504,13 +505,14 @@ char** questionSubmit(int fd, char* topic, char** qList) {
     if (answer[0] == '\0' || answer[strlen(answer)-1] == '\n' || strcmp(answer, "QUR")) {
         printf("ERR: An unexpected protocol message was received\n");
         free(answer);
-        return qList;
+        exit(1);
     }
     free(answer);
     
     answer = readToken(answer, fd, 1);
     if (answer[0] == '\0') {
         printf("ERR: An unexpected protocol message was received\n");
+        exit(1);
     }
     else if (!strcmp(answer, "OK\n")) {
         printf("The question named --%s-- has been successfully registered\n", question);
@@ -520,13 +522,14 @@ char** questionSubmit(int fd, char* topic, char** qList) {
         printf("The question named --%s-- was reported as a duplicate\n", question);
     }
     else if (!strcmp(answer, "FUL\n")) {
-        printf("There question list for this topic is already full\n");
+        printf("The question list for this topic is already full\n");
     }
     else if (!strcmp(answer, "NOK\n")) {
         printf("It was not possible to register this question\n");
     } 
     else {
         printf("ERR: An unexpected protocol message was received\n");
+        exit(1);
     }
 
     free(answer);
@@ -553,27 +556,29 @@ void answerSubmit(int fd, char* topic, char* question) {
     
     answer = readToken(answer, fd, 1);
     if (answer[0] == '\0' || answer[strlen(answer)-1] == '\n' || strcmp(answer, "ANR")) {
-        printf("ERR: An unexpected protocol message was received\n");  //check if needs exit
+        printf("ERR: An unexpected protocol message was received\n");  
         free(answer);
-        return;
+        exit(1);
     }
     free(answer);
     
     answer = readToken(answer, fd, 1);
     if (answer[0] == '\0') {
-        printf("ERR: An unexpected protocol message was received\n");  //check if needs exit
+        printf("ERR: An unexpected protocol message was received\n");
+        exit(1);  
     }
     else if (!strcmp(answer, "OK\n")) {
         printf("An answer to the question named --%s-- has been successfully registered\n", question);
     }
     else if (!strcmp(answer, "FUL\n")) {
-        printf("There question list for this topic is already full\n");
+        printf("The answer list for this question is already full\n");
     }
     else if (!strcmp(answer, "NOK\n")) {
-        printf("It was not possible to register this question\n");
+        printf("It was not possible to register this answer\n");
     } 
     else {
-        printf("ERR: An unexpected protocol message was received\n");  //check if needs exit
+        printf("ERR: An unexpected protocol message was received\n");
+        exit(1); 
     }
 
     free(answer);
