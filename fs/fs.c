@@ -426,7 +426,7 @@ void ans(int fd) {
     sprintf(pathAnswer, "topics/%s/%s/%s_%02d", topic, question, question, size);
     sprintf(pathQuestion, "%s_%02d", question, size);
 
-    if (size == MAX_TOPICS) {
+    if (size - 1 == MAX_TOPICS) {
         sendMessageTCP("ANR FUL\n", 8, fd);
     }
     else if (saveFolder(fd, user, pathQuestion, pathAnswer)) {
