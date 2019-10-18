@@ -85,7 +85,7 @@ int handleFolder(char* path, char* dirName, int fd) {
     return 0;
 }
 
-int sendDirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, socklen_t *addrlen) {  //falta checkar
+int sendDirInfo(char* path, char* dirName, int fd) {  //falta checkar
 
     char AN[4], pathAnswer[MAX_PATH_SIZE], answerDir[MAX_PATH_SIZE], answer[5];
     int size;
@@ -127,45 +127,6 @@ int sendDirInfo(char* path, char* dirName, int fd, struct sockaddr_in *addr, soc
     }
 
     return 0;
-}
-
-int saveFolder(int fd, char* user, char* name, char* path, struct sockaddr_in *addr, socklen_t *addrlen) {  //checked
-
-    char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
-    char *flag = NULL, *ext = NULL;
-    FILE *f;
-
-    if (mkdir(path, 0777)) { return 1; }         
-
-    sprintf(pathUID, "%s/%s_UID.txt", path, name);
-
-    if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
-    fwrite(user, 1, strlen(user), f);                   //check
-    if (fclose(f) == EOF) { return 1; };      
-
-    sprintf(pathTitle, "%s/%s.txt", path, name);
-    if (readAndWrite(pathTitle, "w", 0, fd)) { return 1; }
-
-    free(readToken(NULL, fd, 0));
-    flag = readToken(flag, fd, 1);
-
-    if (!strcmp(flag, "1")) {
-        ext = readToken(ext, fd, 0);
-        sprintf(pathIMG, "%s/%s.%s", path, name, ext);
-        if (readAndWrite(pathIMG, "wb", 0, fd)) { free(ext); free(flag); return 1; }
-    }
-    else if (!strcmp(flag, "0\n")) { free(flag); return 0; }
-    else { free(flag); return 1; }
-
-    free(flag);
-    flag = readToken(flag, fd, 1);
-    if (!strcmp(flag, "\n")){
-        free(ext); free(flag);
-        return 0;
-    }
-
-    free(flag); free(ext);
-    return 1;
 }
 
 char* getDirContent(char* path, char* answer, int flag) {     
@@ -338,20 +299,20 @@ char* lqu(char *buffer) {
     return answer;    
 }
 
-void gqu(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+void gqu(int fd) {
 
     char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE], 
         *topic = NULL, *question = NULL;
 
     topic = readToken(topic, fd, 1);
-    if (topic[strlen(topic)-1] == '\n') {
+    if (topic[0] == '\0' || topic[strlen(topic)-1] == '\n') {
         sendMessageTCP("QGR NOK\n", 8, fd);
         free(topic);
         return;
     }
 
     question = readToken(question, fd, 1);
-    if (question[strlen(question)-1] != '\n') {
+    if (question[0] == '\0' || question[strlen(question)-1] != '\n') {
         sendMessageTCP("QGR NOK\n", 8, fd);
         free(topic); free(question);
         return;
@@ -369,7 +330,7 @@ void gqu(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
     sprintf(pathTopic, "topics/%s", topic);
     sprintf(pathQuestion, "topics/%s/%s", topic, question);
 
-    if (!checkDir(pathTopic) || !checkDir(pathQuestion) || sendDirInfo(pathQuestion, question, fd, addr, addrlen)) {
+    if (!checkDir(pathTopic) || !checkDir(pathQuestion) || sendDirInfo(pathQuestion, question, fd)) {
         sendMessageTCP("QGR EOF\n", 8, fd);
     }
 
@@ -377,27 +338,27 @@ void gqu(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
     free(topic); free(question);
 }
 
-void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {            //checked
+void qus(int fd) {            //checked
 
     char pathTopic[MAX_PATH_SIZE], pathQuestion[MAX_PATH_SIZE],
         *topic = NULL, *question = NULL, *user = NULL;
         
     user = readToken(user, fd, 1);
-    if (user[strlen(user)-1] == '\n') {
+    if (user[0] == '\0' || user[strlen(user)-1] == '\n') {
         sendMessageTCP("QUR NOK\n", 8, fd);
         free(user);
         return;
     }
 
     topic = readToken(topic, fd, 1);
-    if (topic[strlen(topic)-1] == '\n') {
+    if (topic[0] == '\0' || topic[strlen(topic)-1] == '\n') {
         sendMessageTCP("QUR NOK\n", 8, fd);
         free(topic); free(user); 
         return;
     }
 
     question = readToken(question, fd, 1);
-    if (question[strlen(question)-1] == '\n') {
+    if (question[0] == '\0' || question[strlen(question)-1] == '\n') {
         sendMessageTCP("QUR NOK\n", 8, fd);
         free(topic); free(user); free(question);
         return;
@@ -415,7 +376,7 @@ void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {            //ch
     else if (dirSize(pathTopic) == MAX_TOPICS) {
         sendMessageTCP("QUR FUL\n", 8, fd);
     }
-    else if (saveFolder(fd, user, question, pathQuestion, addr, addrlen)) {
+    else if (saveFolder(fd, user, question, pathQuestion)) {
         sendMessageTCP("QUR NOK\n", 8, fd);
     }
     else {
@@ -426,28 +387,28 @@ void qus(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {            //ch
     free(topic); free(user); free(question);
 }
 
-void ans(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
+void ans(int fd) {
 
     char pathQuestion[MAX_PATH_SIZE], pathAnswer[MAX_PATH_SIZE], 
         *topic = NULL, *question = NULL, *user = NULL;
     int size = 0;
 
     user = readToken(user, fd, 1);
-    if (user[strlen(user)-1] == '\n') {
+    if (user[0] == '\0' || user[strlen(user)-1] == '\n') {
         sendMessageTCP("ANR NOK\n", 8, fd);
         free(user);
         return;
     }
 
     topic = readToken(topic, fd, 1);
-    if (topic[strlen(topic)-1] == '\n') {
+    if (topic[0] == '\0' || topic[strlen(topic)-1] == '\n') {
         sendMessageTCP("ANR NOK\n", 8, fd);
         free(topic); free(user); 
         return;
     }
 
     question = readToken(question, fd, 1);
-    if (question[strlen(question)-1] == '\n') {
+    if (question[0] == '\0' || question[strlen(question)-1] == '\n') {
         free(topic); free(user); free(question);
         sendMessageTCP("ANR NOK\n", 8, fd);
         return;
@@ -467,7 +428,7 @@ void ans(int fd, struct sockaddr_in *addr, socklen_t *addrlen) {
     if (size == MAX_TOPICS) {
         sendMessageTCP("ANR FUL\n", 8, fd);
     }
-    else if (saveFolder(fd, user, pathQuestion, pathAnswer, addr, addrlen)) {
+    else if (saveFolder(fd, user, pathQuestion, pathAnswer)) {
         sendMessageTCP("ANR NOK\n", 8, fd);
     }
     else {
@@ -490,22 +451,22 @@ void handleMessageTCP(int fd) {
     
     token = readToken(token, client, 1);
 
-    if (token != NULL) {
+    if (token[0] != '\0') {
         result = checkProtocol(token);
     }
     free(token);
 
     switch (result) {
         case GQU:
-            gqu(client, &addr, &addrlen);
+            gqu(client);
             break;
 
         case QUS:
-            qus(client, &addr, &addrlen);
+            qus(client);
             break;
 
         case ANS:
-            ans(client, &addr, &addrlen);
+            ans(client);
             break;
 
         default:
@@ -525,7 +486,7 @@ void handleMessageUDP(int fd) {
     struct sockaddr_in addr;
     socklen_t addrlen;
 
-    buffer = readMessageUDP(buffer, fd, &addr, &addrlen);
+    buffer = readMessageUDP(buffer, fd, (struct sockaddr*)&addr, &addrlen);     //attetion to cast of pointer
 
     message = (char*) malloc(sizeof(char)*(1+strlen(buffer)));
     strcpy(message, buffer);
@@ -596,7 +557,7 @@ int main(int argc, char **argv) {
     fdUDP = startUDP(NULL, fsport);
 
     //Initializing TCP socket
-    fdTCP = startTCP(NULL, fsport);
+    fdTCP = startTCP(NULL, fsport, 1);
     
     while (1) { 
         /*Mask initialization*/

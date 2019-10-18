@@ -14,8 +14,11 @@
 #include <errno.h>
 #include "util.h"
 
-#define MAX_PATH_SIZE 57
+#define PORT "58020"
+#define MAX_TOPICS 99
+#define TOPIC_SIZE 17
 #define BUFFER_SIZE 2048
+#define MAX_PATH_SIZE 57
 
 int checkUser(char* id) {
 
@@ -51,11 +54,11 @@ int dirSize(char* path) {   //VERIFICACOES
     }
 }
 
-int verifyName(char* topic) {
+int verifyName(char* name) {
 
-    if (topic != NULL && strlen(topic) <= 10) {
-        for (int i = 0; i < strlen(topic); i++) {
-            if ((topic[i] < '0' || topic[i] > '9') && (topic[i] < 'A' || topic[i] > 'Z') && (topic[i] < 'a' || topic[i] > 'z')) {
+    if (name != NULL && strlen(name) <= 10) {
+        for (int i = 0; i < strlen(name); i++) {
+            if ((name[i] < '0' || name[i] > '9') && (name[i] < 'A' || name[i] > 'Z') && (name[i] < 'a' || name[i] > 'z')) {
                 return 1;
             }
         }
@@ -71,7 +74,7 @@ char* readToken(char* answer, int fdTCP, int flag) {
     answer = (char*) malloc(sizeof(char)*size);
     memset(answer, '\0', size);
 
-    while (readBytes = read(fdTCP, buffer, 1) && buffer[0] != ' ' && (buffer[0] != '\n' || flag)) {
+    while (readBytes = read(fdTCP, buffer, 1) && buffer[0] != ' ' && (buffer[0] != '\n' || flag)) {     //check for 
         buffer[1] = '\0';
         size++;
         answer = (char*) realloc(answer, sizeof(char)*size);
@@ -86,17 +89,20 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 
     int readBytes = 0;
     char* buffer[BUFFER_SIZE+1];
-    char* size;
+    char* size, *end;
     FILE *f;
 
     f = fopen(path, mode);
 
     if (nBytes == 0) {
-        size = readToken(size, fd, 0);
-        if (!(nBytes = atoi(size))) { return 1; }
+        size = readToken(size, fd, 1);
+        if (size[0] == '\0' || (size[strlen(size)-1] == '\n') || strlen(size) > 10) { 
+            return 1; 
+        }
+        if (!(nBytes = strtol(size, &end, 10)) || end[0] != '\0') {
+            return 1;
+        } 
     }
-
-
 
     while (nBytes > BUFFER_SIZE) {
         readBytes = read(fd, buffer, BUFFER_SIZE);
@@ -118,7 +124,7 @@ int readAndWrite(char *path, char* mode, int nBytes, int fd) {
 }
 
 
-char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_t *addrlen) {
+char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr *addr, socklen_t *addrlen) {
 
     int size = 4, data = 4;
 
@@ -130,24 +136,27 @@ char* readMessageUDP(char* buffer, int fdUDP, struct sockaddr_in *addr, socklen_
         size *= 2;
         
         buffer = (char*) malloc(sizeof(char)*size);
-        data = recvfrom(fdUDP, buffer, size - 1, MSG_PEEK, (struct sockaddr*)addr, addrlen);
+        data = recvfrom(fdUDP, buffer, size - 1, MSG_PEEK, addr, addrlen);
         buffer[size-1] = '\0'; 
     } while (strlen(buffer) == size - 1);
 
     free(buffer);
     buffer = (char*) malloc(sizeof(char)*(data+1));
-    data = recvfrom(fdUDP, buffer, data, 0, (struct sockaddr*)addr, addrlen);
+    data = recvfrom(fdUDP, buffer, data, 0, addr, addrlen);
     buffer[data] = '\0';
 
     return buffer;
 }
 
-void sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen) {
+int sendMessageUDP(char* buffer, int fdUDP, struct sockaddr_in addr, socklen_t addrlen) {
 
     int n;
     addrlen = sizeof(addr);
+    
     n = sendto(fdUDP, buffer, strlen(buffer), 0, (struct sockaddr*)&addr, addrlen);
-    if (n == -1) exit(2); //check error
+    if (n == -1)  { return -1; }; 
+
+    return 0;
 }
 
 
@@ -162,8 +171,10 @@ int readAndSend(char* path, char* mode, int fd) {
     fseek(f, 0 , SEEK_END);
     size = ftell(f);
     fseek(f, 0 , SEEK_SET);
+
     if (!strcmp(mode, "rb")) {
         sprintf(fileSize, " %d ", size);
+        if (strlen(fileSize) > 10) { return 1; }
         sendMessageTCP(fileSize, strlen(fileSize), fd);
     } 
 
@@ -179,17 +190,60 @@ int readAndSend(char* path, char* mode, int fd) {
     return 0;
 }
 
-int sendMessageTCP(char* buffer, int size, int fdTCP) {
+int sendMessageTCP(char* buffer, int size, int fdTCP) {             //FALTA ALTERAR
 
     int n;
-
+    printf("%s", buffer);
     n = write(fdTCP, buffer, size);
     if (n == -1) { return 1; }
 
     return 0;
 }
 
+int saveFolder(int fd, char* user, char* name, char* path) {  //checked
 
+    char pathUID[MAX_PATH_SIZE] = "", pathTitle[MAX_PATH_SIZE] = "", pathIMG[MAX_PATH_SIZE] = "";
+    char *flag = NULL, *ext = NULL;
+    FILE *f;
+
+    mkdir(path, 0777);
+
+    sprintf(pathUID, "%s/%s_UID.txt", path, name);
+
+    printf("%s\n", pathUID);
+    if ((f = fopen(pathUID, "w")) == NULL ) { return 1; }
+    fwrite(user, 1, strlen(user), f);                   //check
+    if (fclose(f) == EOF) { return 1; };      
+
+    sprintf(pathTitle, "%s/%s.txt", path, name);
+    if (readAndWrite(pathTitle, "w", 0, fd)) { return 1; }
+
+    free(readToken(NULL, fd, 0));
+    flag = readToken(flag, fd, 1);
+    if (!strcmp(flag, "1")) {
+        ext = readToken(ext, fd, 0);
+        if (ext[0] == '\0' || ext[strlen(ext)-1] == '\n') { free(ext); free(flag); return 1; }
+        sprintf(pathIMG, "%s/%s.%s", path, name, ext);
+        if (readAndWrite(pathIMG, "wb", 0, fd)) { free(ext); free(flag); return 1; }
+    }
+    else if (!strcmp(flag, "0\n")) { free(flag); return 0; }
+    else if (!strcmp(flag, "0")) { free(flag); return 2; }
+    else { free(flag); return 1; }
+
+    free(flag);
+    flag = readToken(flag, fd, 1);
+    if (!strcmp(flag, "\n")){
+        free(ext); free(flag);
+        return 0;
+    }
+    else if (flag[0] == '\0') {
+        free(ext); free(flag);
+        return 2;
+    }
+
+    free(flag); free(ext);
+    return 1;
+}
 
 
 
@@ -209,11 +263,11 @@ int startUDP(char* address, char* port) {
     if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) exit(2);  //exit
     if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) exit(2);  //exit
     
-    free(res);
+    freeaddrinfo(res);
     return fd;
 }
 
-int startTCP(char* address, char* port) {
+int startTCP(char* address, char* port, int flag) {
 
     int fd, err;
     struct addrinfo hints, *res;
@@ -227,10 +281,16 @@ int startTCP(char* address, char* port) {
 
     if ((err = getaddrinfo(address, port, &hints, &res)) != 0) exit(2);     //exit
     if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) exit(2);       //exit
-    if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) exit(2);     //exit
-    if (listen(fd, 5) == -1) exit(2);       //exit
+    
+    if (flag) {
+        if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) exit(2);     //exit
+        if (listen(fd, 5) == -1) exit(2);       //exit
+    }
+    else {
+        if (connect(fd, res->ai_addr, res->ai_addrlen) == -1) { return -1; }  
+    }
 
-    free(res);
+    freeaddrinfo(res);
     return fd;
 }
 
@@ -245,4 +305,19 @@ int checkDir(char* path) {
     }
     else if (ENOENT == errno) { return 0;}
     else { exit(1); } //CHECK
+}
+
+int readAndSave(int fd, char* path, char* question) {
+
+    char *id = readToken(id, fd, 1), ret = 0;
+
+    if (id[0] == '\0' || id[strlen(id)-1] == '\n') {
+        free(id);
+        return 1;
+    }
+
+    ret = saveFolder(fd, id, question, path);
+
+    free(id);
+    return ret;
 }

@@ -10,14 +10,15 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include "../util/util.h"
 
 #define PORT "58020"
-#define MAXBUFFERSIZE 4096
-#define STANDARDBUFFERSIZE 256
+#define MAX_BUFFER_SIZE 4096
+#define STD_BUFFER_SIZE 256
 #define MESSAGE_SIZE 30
-#define MAXUSERIDSIZE 5 + 1
-#define TOPICSIZE 17
-#define QUESTIONSIZE 20
+#define ID_SIZE 6
+#define TOPIC_SIZE 17
+#define QUESTION_SIZE 20
 
 extern int errno;
 
@@ -185,11 +186,11 @@ char* registerID(int fdUDP, char* token) {
     // Verifies validity of userID introduced
     token = strtok(NULL, "\n");
     if (token == NULL) {
-        printf("Bad command\n");
+        printf("ERR: Format incorrect\n");
         return "";
     }
     else if (!checkIfUserID(token)) {
-        printf("Bad userID\n");
+        printf("ERR: Invalid user id\n");
         return "";
     }
 
@@ -225,17 +226,17 @@ char* registerID(int fdUDP, char* token) {
 char** topicList(int fdUDP, int *nTopics, char** tList) {
 
     int n = 0, i = 0;
-    char messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
+    char messageReceived[MAX_BUFFER_SIZE] = "", *token = NULL;
 
-    memset(messageReceived, '\0', MAXBUFFERSIZE);
+    memset(messageReceived, '\0', MAX_BUFFER_SIZE);
 
     n = sendto(fdUDP, "LTP\n", 4, 0, resUDP->ai_addr, resUDP->ai_addrlen);
     if (n == -1) error(2);
     
     addrlen = sizeof(addr);
-    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE, 0, (struct sockaddr*) &addr, &addrlen);
+    n = recvfrom(fdUDP, messageReceived, MAX_BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
     if (n == -1) error(2);
-    if (n == MAXBUFFERSIZE - 2) error(3); //message too long, can't be fully recovered
+    if (n == MAX_BUFFER_SIZE - 2) error(3); //message too long, can't be fully recovered
     messageReceived[n] = '\0';
 
     if (!strcmp(messageReceived, "LTR 0\n")) {
@@ -326,7 +327,7 @@ int selectTopicN(char* token, char** tList, int nTopics) {
 char** topicPropose(int fdUDP, char* token, char* userID, int* nTopics, char** tList) {
 
     int n = 0;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[MESSAGE_SIZE] = "", topic[TOPICSIZE] = "";
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MESSAGE_SIZE] = "", topic[TOPIC_SIZE] = "";
 
     memset(messageSent, '\0', MESSAGE_SIZE);
     memset(messageReceived, '\0', MESSAGE_SIZE);
@@ -359,7 +360,7 @@ char** topicPropose(int fdUDP, char* token, char* userID, int* nTopics, char** t
             tList = (char**) realloc(tList, sizeof(char*) * (*nTopics));
         }
 
-        tList[*nTopics - 1] = (char*) malloc(sizeof(char) * TOPICSIZE);
+        tList[*nTopics - 1] = (char*) malloc(sizeof(char) * TOPIC_SIZE);
         strcpy(tList[*nTopics - 1], topic);
     }
     else if (!strcmp(messageReceived, "PTR DUP\n")) {
@@ -381,10 +382,10 @@ char** topicPropose(int fdUDP, char* token, char* userID, int* nTopics, char** t
 char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 
     int n = 0, i = 0;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAXBUFFERSIZE] = "", *token = NULL;
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[MAX_BUFFER_SIZE] = "", *token = NULL;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
-    memset(messageReceived, '\0', MAXBUFFERSIZE);
+    memset(messageReceived, '\0', MAX_BUFFER_SIZE);
 
     strcat(messageSent, "LQU "); strcat(messageSent, topic); strcat(messageSent, "\n");
     fprintf(stderr, "%s", messageSent); // TO REMOVE
@@ -393,9 +394,9 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     if (n == -1) error(2);
     
     addrlen = sizeof(addr);
-    n = recvfrom(fdUDP, messageReceived, MAXBUFFERSIZE, 0, (struct sockaddr*) &addr, &addrlen);
+    n = recvfrom(fdUDP, messageReceived, MAX_BUFFER_SIZE, 0, (struct sockaddr*) &addr, &addrlen);
     if (n == -1) error(2);
-    if (n == MAXBUFFERSIZE - 2) {
+    if (n == MAX_BUFFER_SIZE - 2) {
         error(3); //message too long, can't be fully recovered
     }
     messageReceived[n] = '\0';
@@ -425,7 +426,7 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
     qList = (char**) malloc(sizeof(char*) * (*nQuestions));
 
     while ((token = strtok(NULL, " \n")) != NULL) {
-        qList[i] = (char*) malloc(sizeof(char) * QUESTIONSIZE);
+        qList[i] = (char*) malloc(sizeof(char) * QUESTION_SIZE);
         strcpy(qList[i++], token);
     }
 
@@ -442,7 +443,7 @@ char** questionList(int fdUDP, int *nQuestions, char* topic, char** qList) {
 }
 
 char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, char* topic, char* question, char* dirPath) {
-    char *token, *extension, fileName[STANDARDBUFFERSIZE], filePath[STANDARDBUFFERSIZE], an[2];
+    char *token, *extension, fileName[STD_BUFFER_SIZE], filePath[STD_BUFFER_SIZE], an[2];
     int numSize = 1;
     long totalSize;
     FILE* fp;
@@ -483,15 +484,15 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
     strcpy(fileName, filePath);
     fp = fopen(strcat(fileName, ".txt"), "w");
 
-    memset(messageReceived, '\0', STANDARDBUFFERSIZE);
+    memset(messageReceived, '\0', STD_BUFFER_SIZE);
     ptr = messageReceived;
 
-    while (totalSize >= STANDARDBUFFERSIZE) {
-        ptr = readTCP(fdTCP, STANDARDBUFFERSIZE - 1, ptr);
+    while (totalSize >= STD_BUFFER_SIZE) {
+        ptr = readTCP(fdTCP, STD_BUFFER_SIZE - 1, ptr);
         *ptr = '\0';
-        fwrite(messageReceived, 1, STANDARDBUFFERSIZE - 1, fp);
+        fwrite(messageReceived, 1, STD_BUFFER_SIZE - 1, fp);
         ptr = messageReceived;
-        totalSize -= (STANDARDBUFFERSIZE - 1);
+        totalSize -= (STD_BUFFER_SIZE - 1);
     }
 
     ptr = readTCP(fdTCP, totalSize, ptr);
@@ -507,7 +508,7 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
 
     if (!strcmp(token, "1")) {
         readTCP(fdTCP, 1, ptr);
-        memset(fileName, '\0', STANDARDBUFFERSIZE);
+        memset(fileName, '\0', STD_BUFFER_SIZE);
         strcpy(fileName, filePath);
 
         readTCP(fdTCP, 4, ptr);
@@ -528,26 +529,26 @@ char* questionGetAux(int isAnswer, int fdTCP, char* messageReceived, char* ptr, 
         if (strlen(token) > 10) error(2);
         totalSize = strtoul(token, NULL, 10);
 
-        memset(messageReceived, '\0', STANDARDBUFFERSIZE);
+        memset(messageReceived, '\0', STD_BUFFER_SIZE);
         ptr = messageReceived;
 
         fp = fopen(fileName, "wb");
         
         while (totalSize > 0) {
-            if (totalSize > STANDARDBUFFERSIZE) {
-                readTCP(fdTCP, STANDARDBUFFERSIZE, ptr);
-                fwrite(ptr, 1, STANDARDBUFFERSIZE, fp);
+            if (totalSize > STD_BUFFER_SIZE) {
+                readTCP(fdTCP, STD_BUFFER_SIZE, ptr);
+                fwrite(ptr, 1, STD_BUFFER_SIZE, fp);
             }
             else {
                 readTCP(fdTCP, totalSize, ptr);
                 fwrite(ptr, 1, totalSize, fp);
             }
-            totalSize -= STANDARDBUFFERSIZE;
+            totalSize -= STD_BUFFER_SIZE;
         }
 
         fclose(fp);
 
-        memset(messageReceived, '\0', STANDARDBUFFERSIZE);
+        memset(messageReceived, '\0', STD_BUFFER_SIZE);
         ptr = messageReceived;
     }
 
@@ -558,11 +559,11 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int* sQue
 
     int n, i, questionSelected, numSize, nAnswers;
     ssize_t nBytes, nLeft, nWritten;
-    char messageSent[MESSAGE_SIZE] = "", messageReceived[STANDARDBUFFERSIZE] = "", *token2, *ptr = messageSent, dirPath[16] = "\0";
+    char messageSent[MESSAGE_SIZE] = "", messageReceived[STD_BUFFER_SIZE] = "", *token2, *ptr = messageSent, dirPath[16] = "\0";
     FILE *fp;
 
-    memset(messageSent, '\0', MESSAGE_SIZE);
-    memset(messageReceived, '\0', STANDARDBUFFERSIZE);
+//    memset(messageSent, '\0', MESSAGE_SIZE);
+//    memset(messageReceived, '\0', STD_BUFFER_SIZE);
 
     token = strtok(NULL, " \n");
     if ((token == NULL) || (strtok(NULL, "\n") != NULL)) {
@@ -595,9 +596,6 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int* sQue
     }
 
     strcat(messageSent, "GQU "); strcat(messageSent, topic); strcat(messageSent, " "); strcat(messageSent, token2); strcat(messageSent, "\n");
-
-    n = connect(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
-    if (n == -1) error(2);
 
     nBytes = strlen(messageSent);
     ptr = messageSent;
@@ -653,14 +651,14 @@ void questionGet(int commandType, int fdTCP, char* token, char* topic, int* sQue
 }
 
 char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* userID, int* sQuestion, int* nQuestions, char** qList) {
-    char messageSent[STANDARDBUFFERSIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr, *token2 = "", totalSizeStr[10], textFileName[MESSAGE_SIZE], extension[4], 
-         question[QUESTIONSIZE] = "";
+    char messageSent[STD_BUFFER_SIZE] = "", messageReceived[MESSAGE_SIZE] = "", *ptr, *token2 = "", totalSizeStr[10], textFileName[MESSAGE_SIZE], extension[4], 
+         question[QUESTION_SIZE] = "";
     FILE *fp;
     struct stat st;
     int n, i, totalSize, nRead;
 
     memset(messageSent, '\0', MESSAGE_SIZE);
-    memset(messageReceived, '\0', STANDARDBUFFERSIZE);
+    memset(messageReceived, '\0', STD_BUFFER_SIZE);
 
     if (isAnswerSubmit) {
         printf("%s\n", qList[*sQuestion]);
@@ -719,12 +717,12 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
     
     writeTCP(fdTCP, strlen(messageSent), ptr);
 
-    memset(messageSent, '\0', STANDARDBUFFERSIZE);
+    memset(messageSent, '\0', STD_BUFFER_SIZE);
 
     fp = fopen(textFileName, "r");
 
-    while (totalSize >= STANDARDBUFFERSIZE) {
-        nRead = fread(messageSent, 1, STANDARDBUFFERSIZE, fp);
+    while (totalSize >= STD_BUFFER_SIZE) {
+        nRead = fread(messageSent, 1, STD_BUFFER_SIZE, fp);
         writeTCP(fdTCP, nRead, ptr);
         totalSize -= (nRead);
     }
@@ -758,7 +756,7 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
         memcpy(extension, &token2[totalSize - 3], 3);
 
         extension[3] = '\0';
-        memset(messageSent, '\0', STANDARDBUFFERSIZE);
+        memset(messageSent, '\0', STD_BUFFER_SIZE);
         strcat(messageSent, extension); strcat(messageSent, " ");
 
         totalSize = st.st_size;
@@ -768,20 +766,20 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
         ptr = messageSent;
         writeTCP(fdTCP, strlen(messageSent), ptr);
 
-        memset(messageSent, '\0', STANDARDBUFFERSIZE);
+        memset(messageSent, '\0', STD_BUFFER_SIZE);
 
         fp = fopen(token2, "rb");
 
         while (totalSize > 0) {
-            if (totalSize > STANDARDBUFFERSIZE) {
-                fread(ptr, 1, STANDARDBUFFERSIZE, fp);
-                writeTCP(fdTCP, STANDARDBUFFERSIZE, ptr);
+            if (totalSize > STD_BUFFER_SIZE) {
+                fread(ptr, 1, STD_BUFFER_SIZE, fp);
+                writeTCP(fdTCP, STD_BUFFER_SIZE, ptr);
             }
             else {
                 fread(ptr, 1, totalSize, fp);
                 writeTCP(fdTCP, totalSize, ptr);
             }
-            totalSize -= STANDARDBUFFERSIZE;
+            totalSize -= STD_BUFFER_SIZE;
         }
 
         fclose(fp);
@@ -816,7 +814,7 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
             qList = (char**) realloc(qList, sizeof(char*) * (*nQuestions));
         }
 
-        qList[*nQuestions - 1] = (char*) malloc(sizeof(char) * QUESTIONSIZE);
+        qList[*nQuestions - 1] = (char*) malloc(sizeof(char) * QUESTION_SIZE);
         strcpy(qList[*nQuestions - 1], question);
     }
     else if (!strcmp(messageReceived, "ANR OK\n")) {
@@ -832,7 +830,7 @@ char** submit(int fdTCP, int isAnswerSubmit, char* token, char* topic, char* use
 int main(int argc, char **argv) {
 
     int option, n = 0, p = 0, fdUDP, fdTCP, nTopics = 0, nQuestions = 0, sTopic = -1, sQuestion = -1;
-    char *fsip = "localhost", *fsport = PORT, command[MAXBUFFERSIZE] = "", *token = NULL, userID[MAXUSERIDSIZE];
+    char *fsip = "localhost", *fsport = PORT, command[MAX_BUFFER_SIZE] = "", *token = NULL, userID[ID_SIZE];
     int result = -1, pid;
     ssize_t s;
     struct addrinfo hints;
@@ -872,15 +870,15 @@ int main(int argc, char **argv) {
     fdUDP = socket(resUDP->ai_family, resUDP->ai_socktype, resUDP->ai_protocol);
     if (fdUDP == -1) error(2);
     
-    memset(userID, '\0', MAXUSERIDSIZE);
-    memset(command, '\0', MAXBUFFERSIZE);
+    memset(userID, '\0', ID_SIZE);
+    memset(command, '\0', MAX_BUFFER_SIZE);
 
     while (result != EXIT) {
         result = -1;
         printf("Enter command: ");
 
           // TODO substituir
-        fgets(command, MAXBUFFERSIZE, stdin);
+        fgets(command, MAX_BUFFER_SIZE, stdin);
         token = strtok(command, " \n"); 
 
         if (token != NULL) {
@@ -940,6 +938,9 @@ int main(int argc, char **argv) {
                     nQuestions = 0;
                     sQuestion = -1;
                 }
+                for (int i = 0; i < nTopics; i++) {
+                    printf("Item: %s\n", tList[i]);
+                }
                 
                 break;
             
@@ -958,7 +959,7 @@ int main(int argc, char **argv) {
                 if ((token != NULL)) {
                     printf("ERR: Format incorrect. Should be: \"question_list\" or \"ql\"\n");
                 }
-                else if(sTopic == -1) {
+                else if (sTopic == -1) {
                     printf("ERR: Missing information. No topic has been selected\n");
                 }
                 else { 
@@ -983,6 +984,9 @@ int main(int argc, char **argv) {
 
                     fdTCP = socket(resTCP->ai_family, resTCP->ai_socktype, resTCP->ai_protocol);
                     if (fdTCP == -1) error(2);
+
+                    n = connect(fdTCP, resTCP->ai_addr, resTCP->ai_addrlen);
+                    if (n == -1) error(2);
 
                     if (result == QUESTION_GET)
                         questionGet(0, fdTCP, token, tList[sTopic], &sQuestion, nQuestions, qList);
